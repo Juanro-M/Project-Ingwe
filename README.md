@@ -12,6 +12,8 @@ Built with Jetpack Compose, Kotlin, custom Canvas gauge rendering, and direct BL
 The instrument cluster features high-contrast analog dials rendered on hardware-accelerated Compose Canvas with sub-divided graduation tracks, sweep needles, peak indicators, and digital readouts.
 
 ### 1. Turbo Cluster Page
+![Turbo Cluster](docs/screenshots/01_turbo_cluster.png)
+
 * **Tachometer**: 0 to 6,000 RPM range tailored for Amarok TDI engines with an alert redline zone starting at 4,500 RPM.
 * **Precision Boost Gauge**:
   * Seamless one-touch toggle between **BAR** (`-1.0` to `+2.5 BAR`) and **PSI** (`-15.0` to `+35.0 PSI`).
@@ -24,14 +26,22 @@ The instrument cluster features high-contrast analog dials rendered on hardware-
   * **VGT Vane Position**: Variable turbine geometry actuator position (`0` to `100 %`).
   * **Engine Output Torque**: Delivered flywheel torque (`0` to `650 Nm`).
 
+---
+
 ### 2. ZF 8HP Driveline Page
+![ZF 8HP Driveline](docs/screenshots/02_zf_driveline.png)
+
 * **Current Gear**: Large digital indicator (`D1` through `D8`, `S1` through `S8`, `R`, `N`, `P`).
 * **Torque Converter Lockup**: Real-time clutch engagement status (`LOCKED`, `SLIP`, `OPEN`).
 * **Transmission Fluid Temp (ATF)**: Monitored via TCM address `0x7E1` (`40` to `150 °C`, warning at `105 °C`, critical at `115 °C`).
 * **Engine Torque Delivery**: Live torque input into transmission (`Nm`).
 * **Coolant and Oil Temperatures**: Operating baseline gauges.
 
+---
+
 ### 3. 4Motion Off-Road Page
+![4Motion Off-Road](docs/screenshots/03_4motion_offroad.png)
+
 * **Steering Wheel Angle**: Front wheel angle in degrees (`L 0-540°` / `R 0-540°`).
 * **Inclinometers**:
   * **Pitch Angle**: Vehicle ascent and descent grade (`-45°` to `+45°`).
@@ -39,7 +49,11 @@ The instrument cluster features high-contrast analog dials rendered on hardware-
 * **Traction Wheel Slip**: Differential wheel speed percentage across the 4Motion system.
 * **Alternator Battery Voltage**: Real-time electrical system monitoring (`10.0` to `16.0 V`).
 
+---
+
 ### 4. Diagnostic Trouble Code (DTC) Page
+![DTC Diagnostics](docs/screenshots/04_dtc_diagnostics.png)
+
 * **MIL Status**: Live Malfunction Indicator Lamp (Check Engine Light) alert banner.
 * **ECU Targeting**: Configured for ECU address `0x7E0` (Bosch EDC17 / MD1).
 * **ECU Scanner**: OBD-II Mode 03 (Confirmed) and Mode 07 (Pending) fault interrogation.
@@ -76,16 +90,38 @@ The instrument cluster features high-contrast analog dials rendered on hardware-
 
 ---
 
-## Head Unit Installation (UIS8581A / TS18)
+## USB Installation Guide for Android Radio (UIS8581A / TS18)
 
-### Direct USB Sideload (No ADB Required)
-1. Build the APK using `./gradlew assembleDebug` (outputs to `app/build/outputs/apk/debug/app-debug.apk`).
-2. Copy `app-debug.apk` onto a FAT32-formatted USB flash drive.
-3. Plug the drive into the head unit's USB port.
-4. Open the pre-installed **File Manager** on the head unit, locate the APK on the USB drive, and tap to install.
-5. Allow installation from unknown sources when prompted.
+Since your head unit has a USB slot or USB cable in the glovebox/console, you can install the app directly in under 2 minutes without needing Developer Options or ADB:
 
-### Factory Settings Reference Passwords
+### Step 1: Format the USB Drive
+* Use any standard USB flash drive.
+* Format it on your PC as **FAT32** or **exFAT** (Android radios read FAT32 most reliably).
+
+### Step 2: Copy the APK
+* Copy the compiled `app-debug.apk` file directly onto the USB drive (do not put it inside deep nested folders).
+
+### Step 3: Connect to the Radio
+* Plug the USB flash drive into the USB port or cable lead of your Android radio.
+* Wait a few seconds until the radio displays a notification like `USB Drive Connected` or `External Storage Mounted`.
+
+### Step 4: Open File Manager and Install
+1. Open the radio's app drawer.
+2. Launch the pre-installed **File Manager** (on some Chinese radios, this app is named **Files**, **File Explorer**, or **ApkInstaller**).
+3. Select your USB drive from the storage list on the left.
+4. Tap `app-debug.apk`.
+5. Tap **Install**.
+
+### Step 5: Grant Permission if Prompted
+* If Android displays a security dialog stating: `"For your security, your phone is not allowed to install unknown apps from this source"`, tap **Settings** on that dialog.
+* Toggle the switch for **Allow from this source** to **ON**.
+* Press the back arrow and tap **Install** again.
+* Once installation completes, tap **Open**. The AmarokDash cluster will appear on your radio screen.
+
+---
+
+## Factory Settings Reference Passwords
+
 Common passwords for the UIS8581A / OYIN / TS18 platform if prompted by system menus:
 * `8888`
 * `3368`
