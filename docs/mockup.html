@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AmarokDash Digital Cockpit Preview</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    input[type=range]::-webkit-slider-thumb {
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #F5A623;
+      cursor: pointer;
+      box-shadow: 0 0 8px #F5A623;
+    }
+  </style>
+</head>
+<body class="bg-[#08090C] text-[#E8E8E8] antialiased m-0 p-3 select-none font-sans">
+
+  <!-- Main Container -->
+  <div class="max-w-5xl mx-auto bg-[#0C0E14] border border-[#222733] rounded-2xl p-4 shadow-2xl overflow-hidden">
+    
+    <!-- Top Status Bar -->
+    <div class="flex items-center justify-between border-b border-[#1E2330] pb-3 mb-3">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-[#3DDC84]/15 border border-[#3DDC84]/40 text-[#3DDC84]">
+          <span class="w-2 h-2 rounded-full bg-[#3DDC84]"></span>
+          OBD-II LIVE
+        </span>
+        <span class="text-xs font-bold tracking-widest text-zinc-300">VW AMAROK 3.0 V6 TDI</span>
+        <span class="text-[10px] px-2 py-0.5 rounded bg-[#161A24] text-zinc-400 border border-[#262D3D]">ECU 0x7E0</span>
+      </div>
+
+      <!-- Mode Selector Tabs -->
+      <div class="flex bg-[#141822] border border-[#262D3D] rounded-lg p-0.5 text-xs font-semibold">
+        <button id="tabTurbo" onclick="setActiveTab('turbo')" class="px-3 py-1 rounded-md bg-amber-500 text-black font-bold transition">TURBO CLUSTER</button>
+        <button id="tabTrans" onclick="setActiveTab('trans')" class="px-3 py-1 rounded-md text-zinc-400 hover:text-white transition">ZF 8HP</button>
+        <button id="tabOffroad" onclick="setActiveTab('offroad')" class="px-3 py-1 rounded-md text-zinc-400 hover:text-white transition">4MOTION</button>
+        <button id="tabDtc" onclick="setActiveTab('dtc')" class="px-3 py-1 rounded-md text-zinc-400 hover:text-white transition">DTCs (3)</button>
+      </div>
+
+      <!-- Action toggles in top bar -->
+      <div class="flex items-center gap-2">
+        <button id="unitBtn" onclick="toggleUnit()" class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#181C26] hover:bg-[#202634] border border-[#2B3345] transition-all text-xs font-semibold cursor-pointer">
+          <span class="text-zinc-400">BOOST:</span>
+          <span id="unitLabel" class="text-amber-400 font-extrabold tracking-wider">BAR</span>
+          <span class="text-zinc-500">/</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active DTC Warning Banner -->
+    <div id="dtcBanner" onclick="setActiveTab('dtc')" class="cursor-pointer mb-3 px-3 py-2 rounded-lg bg-[#2A1215] border border-[#FF4444]/60 flex items-center justify-between text-xs transition hover:bg-[#34161A]">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#FF4444]"></span>
+        <span class="text-[#FF8A80] font-semibold">WARNING: 3 ERROR CODES DETECTED: P0299, P0401, P2002</span>
+      </div>
+      <span class="text-[#FF5252] font-bold text-[11px] uppercase tracking-wider">VIEW & CLEAR DTCs</span>
+    </div>
+
+    <!-- Throttle Simulator Bar -->
+    <div class="bg-[#12151E] border border-[#202634] rounded-xl px-4 py-2.5 flex items-center justify-between gap-4 mb-4">
+      <div class="flex items-center gap-2 min-w-[130px]">
+        <span class="text-xs font-bold tracking-wide text-zinc-300">THROTTLE:</span>
+        <span id="throttleText" class="font-mono text-amber-400 font-extrabold text-sm">55%</span>
+      </div>
+      <input id="throttleSlider" type="range" min="0" max="100" value="55" oninput="onThrottleChange(this.value)" class="w-full accent-amber-500 bg-[#1D2330] h-2 rounded-lg cursor-pointer" />
+      <div class="flex gap-1.5 shrink-0">
+        <button onclick="setThrottlePreset(5)" class="text-[10px] px-2 py-0.5 rounded bg-[#1C212E] hover:bg-[#283042] text-zinc-300 font-bold border border-[#2B3345]">IDLE</button>
+        <button onclick="setThrottlePreset(40)" class="text-[10px] px-2 py-0.5 rounded bg-[#1C212E] hover:bg-[#283042] text-zinc-300 font-bold border border-[#2B3345]">CRUISE</button>
+        <button onclick="setThrottlePreset(75)" class="text-[10px] px-2 py-0.5 rounded bg-[#1C212E] hover:bg-[#283042] text-zinc-300 font-bold border border-[#2B3345]">BOOST</button>
+        <button onclick="setThrottlePreset(100)" class="text-[10px] px-2 py-0.5 rounded bg-[#2D1B13] hover:bg-[#3D2519] text-amber-400 font-bold border border-amber-600/50">WOT</button>
+      </div>
+    </div>
+
+    <!-- TAB 1: TURBO & CLUSTER -->
+    <div id="tabContentTurbo" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center justify-center py-1">
+        
+        <!-- Dial 1: Tachometer -->
+        <div class="flex flex-col items-center">
+          <div class="text-[11px] font-bold tracking-wider text-zinc-400 mb-1">TACHOMETER</div>
+          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#1E232E] via-[#121419] to-[#0A0B0E] border-2 border-[#2A3142] shadow-[0_0_20px_rgba(0,0,0,0.8)]">
+            <canvas id="tachCanvas" width="210" height="210" class="w-full h-full"></canvas>
+            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
+              <span id="tachValueText" class="font-mono text-2xl font-black text-white tracking-tight">2,725</span>
+              <span class="text-[10px] font-bold text-amber-500 tracking-wider">RPM x1000</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dial 2: Boost Gauge -->
+        <div class="flex flex-col items-center scale-105">
+          <div class="flex items-center gap-1.5 mb-1 cursor-pointer" onclick="toggleUnit()">
+            <span class="text-xs font-extrabold tracking-wider text-amber-400">BOOST PRESSURE</span>
+            <span id="boostPill" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-extrabold border border-amber-500/40">BAR</span>
+          </div>
+          <div class="relative w-[235px] h-[235px] rounded-full p-2 bg-gradient-to-b from-[#222938] via-[#141720] to-[#08090D] border-2 border-[#384257] shadow-[0_0_28px_rgba(245,166,35,0.15)]">
+            <canvas id="boostCanvas" width="225" height="225" class="w-full h-full"></canvas>
+            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
+              <span id="boostValueText" class="font-mono text-3xl font-black text-amber-400 tracking-tight">+1.41</span>
+              <div class="flex items-center gap-1 text-[11px] font-extrabold text-zinc-300">
+                <span id="boostUnitText">BAR</span>
+                <span id="boostPeakText" class="text-[9px] text-[#FF5252] font-mono font-bold ml-1">PK +1.85</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dial 3: Speedometer -->
+        <div class="flex flex-col items-center">
+          <div class="text-[11px] font-bold tracking-wider text-zinc-400 mb-1">SPEEDOMETER</div>
+          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#1E232E] via-[#121419] to-[#0A0B0E] border-2 border-[#2A3142] shadow-[0_0_20px_rgba(0,0,0,0.8)]">
+            <canvas id="speedCanvas" width="210" height="210" class="w-full h-full"></canvas>
+            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
+              <span id="speedValueText" class="font-mono text-2xl font-black text-[#00E5FF] tracking-tight">74</span>
+              <span class="text-[10px] font-bold text-zinc-400 tracking-wider">KM/H</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Turbo Telemetry Auxiliary Row -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-zinc-400 font-bold text-[11px]">EGT PRE-TURBO</span>
+            <span id="egtVal" class="font-mono font-bold text-amber-400">568 °C</span>
+          </div>
+          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
+            <div id="egtBar" class="bg-amber-400 h-full rounded-full transition-all" style="width: 58%;"></div>
+          </div>
+          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>200°</span><span>720°</span><span>900°C</span></div>
+        </div>
+
+        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-zinc-400 font-bold text-[11px]">CHARGE AIR</span>
+            <span id="chargeAirVal" class="font-mono font-bold text-[#00E5FF]">45 °C</span>
+          </div>
+          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
+            <div id="chargeAirBar" class="bg-[#00E5FF] h-full rounded-full transition-all" style="width: 50%;"></div>
+          </div>
+          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0°</span><span>55°</span><span>90°C</span></div>
+        </div>
+
+        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-zinc-400 font-bold text-[11px]">VGT VANE POS</span>
+            <span id="vgtVal" class="font-mono font-bold text-[#3DDC84]">65 %</span>
+          </div>
+          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
+            <div id="vgtBar" class="bg-[#3DDC84] h-full rounded-full transition-all" style="width: 65%;"></div>
+          </div>
+          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0%</span><span>50%</span><span>100%</span></div>
+        </div>
+
+        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-zinc-400 font-bold text-[11px]">ENG TORQUE</span>
+            <span id="torqueVal" class="font-mono font-bold text-amber-400">368 Nm</span>
+          </div>
+          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
+            <div id="torqueBar" class="bg-amber-400 h-full rounded-full transition-all" style="width: 57%;"></div>
+          </div>
+          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0</span><span>350</span><span>650 Nm</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: ZF 8HP DRIVELINE -->
+    <div id="tabContentTrans" class="hidden space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+        <!-- Boost Dial -->
+        <div class="flex flex-col items-center">
+          <div class="text-xs font-extrabold tracking-wider text-amber-400 mb-1">BOOST PRESSURE</div>
+          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#222938] via-[#141720] to-[#08090D] border-2 border-[#384257]">
+            <canvas id="transBoostCanvas" width="210" height="210" class="w-full h-full"></canvas>
+            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
+              <span id="transBoostValueText" class="font-mono text-2xl font-black text-amber-400">+1.41</span>
+              <span id="transBoostUnitText" class="text-[10px] font-bold text-zinc-300">BAR</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ZF 8HP Driveline Card -->
+        <div class="bg-[#131620] border border-[#272F40] rounded-xl p-4 space-y-4">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-zinc-300 tracking-wider">ZF 8HP AUTOMATIC TRANSMISSION</span>
+            <span id="lockupBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#3DDC84]/20 border border-[#3DDC84] text-[#3DDC84]">LOCKUP: LOCKED</span>
+          </div>
+
+          <div class="flex justify-between items-end border-b border-[#202736] pb-3">
+            <div>
+              <span class="text-[10px] text-zinc-500 block uppercase font-bold">Current Gear</span>
+              <span id="gearDisplay" class="font-mono text-5xl font-black text-amber-400">D4</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-zinc-500 block uppercase font-bold">Engine Torque Output</span>
+              <span id="transTorqueDisplay" class="font-mono text-3xl font-black text-white">368 <span class="text-xs text-amber-400">Nm</span></span>
+            </div>
+          </div>
+
+          <!-- ATF Temp -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-zinc-400 font-bold">ATF FLUID TEMPERATURE</span>
+              <span id="atfTempDisplay" class="font-mono font-bold text-[#3DDC84]">90 °C</span>
+            </div>
+            <div class="w-full bg-[#1A1F2C] h-2.5 rounded-full overflow-hidden">
+              <div id="atfBar" class="bg-[#3DDC84] h-full rounded-full transition-all" style="width: 50%;"></div>
+            </div>
+            <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>40°C</span><span>Safe (80-95°C)</span><span>Warning (115°C)</span></div>
+          </div>
+
+          <!-- Coolant & Oil Temp -->
+          <div class="grid grid-cols-2 gap-3 pt-1">
+            <div class="bg-[#0D1017] p-2.5 rounded-lg border border-[#1E2533]">
+              <span class="text-[10px] text-zinc-400 block font-bold">COOLANT</span>
+              <span id="transCoolant" class="font-mono font-bold text-sm text-[#3DDC84]">92 °C</span>
+            </div>
+            <div class="bg-[#0D1017] p-2.5 rounded-lg border border-[#1E2533]">
+              <span class="text-[10px] text-zinc-400 block font-bold">OIL TEMP</span>
+              <span id="transOil" class="font-mono font-bold text-sm text-amber-400">100 °C</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: 4MOTION OFF-ROAD -->
+    <div id="tabContentOffroad" class="hidden space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+        <!-- Boost on left -->
+        <div class="flex flex-col items-center">
+          <div class="text-xs font-extrabold tracking-wider text-amber-400 mb-1">BOOST PRESSURE</div>
+          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#222938] via-[#141720] to-[#08090D] border-2 border-[#384257]">
+            <canvas id="offroadBoostCanvas" width="210" height="210" class="w-full h-full"></canvas>
+            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
+              <span id="offroadBoostValueText" class="font-mono text-2xl font-black text-amber-400">+1.41</span>
+              <span id="offroadBoostUnitText" class="text-[10px] font-bold text-zinc-300">BAR</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4Motion Card -->
+        <div class="bg-[#131620] border border-[#272F40] rounded-xl p-4 space-y-4">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-zinc-300 tracking-wider">4MOTION OFF-ROAD TELEMETRY</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00E5FF]/20 border border-[#00E5FF] text-[#00E5FF]">ALL-WHEEL DRIVE</span>
+          </div>
+
+          <!-- Inclinometers & Steering -->
+          <div class="grid grid-cols-3 gap-2 text-center border-b border-[#202736] pb-3">
+            <div class="bg-[#0C0F16] p-2.5 rounded-lg border border-[#1A212E]">
+              <span class="text-[10px] text-zinc-400 block font-bold">STEERING</span>
+              <span id="offroadSteering" class="font-mono text-xl font-black text-[#00E5FF]">R 6°</span>
+            </div>
+            <div class="bg-[#0C0F16] p-2.5 rounded-lg border border-[#1A212E]">
+              <span class="text-[10px] text-zinc-400 block font-bold">PITCH (CLIMB)</span>
+              <span id="offroadPitch" class="font-mono text-xl font-black text-amber-400">+8°</span>
+            </div>
+            <div class="bg-[#0C0F16] p-2.5 rounded-lg border border-[#1A212E]">
+              <span class="text-[10px] text-zinc-400 block font-bold">ROLL (TILT)</span>
+              <span id="offroadRoll" class="font-mono text-xl font-black text-zinc-200">6°</span>
+            </div>
+          </div>
+
+          <!-- Wheel Slip -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-zinc-400 font-bold">TRACTION WHEEL SLIP</span>
+              <span id="offroadSlipVal" class="font-mono font-bold text-[#3DDC84]">4.7 %</span>
+            </div>
+            <div class="w-full bg-[#1A1F2C] h-2.5 rounded-full overflow-hidden">
+              <div id="offroadSlipBar" class="bg-[#3DDC84] h-full rounded-full transition-all" style="width: 16%;"></div>
+            </div>
+            <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0% (Full Grip)</span><span>15% (Slip Warn)</span><span>30% (Loose Sand)</span></div>
+          </div>
+
+          <!-- Torque & Battery -->
+          <div class="grid grid-cols-2 gap-3 pt-1">
+            <div class="bg-[#0D1017] p-2 rounded-lg border border-[#1E2533]">
+              <span class="text-[10px] text-zinc-400 block font-bold">DELIVERED TORQUE</span>
+              <span id="offroadTorque" class="font-mono font-bold text-sm text-white">368 Nm</span>
+            </div>
+            <div class="bg-[#0D1017] p-2 rounded-lg border border-[#1E2533]">
+              <span class="text-[10px] text-zinc-400 block font-bold">BATTERY VOLTAGE</span>
+              <span id="offroadBattery" class="font-mono font-bold text-sm text-[#3DDC84]">14.1 V</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 4: DTC DIAGNOSTIC CODES -->
+    <div id="tabContentDtc" class="hidden space-y-4">
+      <div class="flex items-center justify-between border-b border-[#212735] pb-3">
+        <div>
+          <h2 class="text-base font-extrabold text-white tracking-wide">ECU DIAGNOSTIC TROUBLE CODES (DTC)</h2>
+          <p class="text-xs text-zinc-400">Target ECU: 0x7E0 (Bosch EDC17 / MD1 Amarok 3.0 V6 TDI)</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="scanDtc()" id="scanBtn" class="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-black transition cursor-pointer">
+            SCAN ECU
+          </button>
+          <button onclick="clearDtc()" id="clearBtn" class="px-3.5 py-1.5 rounded-lg bg-[#301618] hover:bg-[#421D20] text-[#FF5252] border border-[#FF5252]/40 text-xs font-bold transition cursor-pointer">
+            CLEAR DTCs (MODE 04)
+          </button>
+        </div>
+      </div>
+
+      <!-- Scan Progress Bar -->
+      <div id="scanProgressBar" class="hidden w-full bg-[#1A1F2C] h-1.5 rounded-full overflow-hidden">
+        <div id="scanProgressFill" class="bg-amber-400 h-full w-0 transition-all duration-150"></div>
+      </div>
+
+      <!-- DTC List -->
+      <div id="dtcList" class="space-y-3">
+        <div class="p-3.5 rounded-xl bg-[#131620] border border-[#272F40]">
+          <div class="flex justify-between items-start">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2.5 py-1 rounded bg-[#FF4444]/20 border border-[#FF4444] text-[#FF5252] font-mono font-black text-sm">P0299</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">Turbocharger Underboost Condition</h3>
+                <p class="text-xs text-zinc-400">Boost & Induction System • Stored Fault</p>
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FF4444]/15 text-[#FF5252]">CONFIRMED</span>
+          </div>
+          <p class="text-xs text-zinc-300 mt-2">Manifold absolute pressure is below requested boost target by ECM under high load.</p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-[#131620] border border-[#272F40]">
+          <div class="flex justify-between items-start">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2.5 py-1 rounded bg-[#FF4444]/20 border border-[#FF4444] text-[#FF5252] font-mono font-black text-sm">P0401</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">EGR Flow Insufficient Detected</h3>
+                <p class="text-xs text-zinc-400">Exhaust Gas Recirculation • Stored Fault</p>
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FF4444]/15 text-[#FF5252]">CONFIRMED</span>
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-[#131620] border border-[#272F40]">
+          <div class="flex justify-between items-start">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2.5 py-1 rounded bg-amber-500/20 border border-amber-500 text-amber-400 font-mono font-black text-sm">P2002</span>
+              <div>
+                <h3 class="text-sm font-bold text-white">DPF Efficiency Below Threshold Bank 1</h3>
+                <p class="text-xs text-zinc-400">Exhaust Aftertreatment • Pending Verification</p>
+              </div>
+            </div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400">PENDING</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="noCodesBanner" class="hidden p-8 text-center rounded-xl bg-[#11141C] border border-[#202736]">
+        <h3 class="text-base font-bold text-[#3DDC84]">ALL SYSTEMS NORMAL</h3>
+        <p class="text-xs text-zinc-400">No diagnostic trouble codes found in ECU memory.</p>
+      </div>
+    </div>
+
+    <!-- Bottom Telemetry Bar -->
+    <div class="flex items-center justify-between border-t border-[#1C212E] pt-3 mt-4 text-xs">
+      <div class="flex items-center gap-4 text-zinc-400">
+        <span>FUEL CONSUMPTION: <b class="font-mono text-zinc-200" id="fuelText">2.8 L/h</b></span>
+        <span>PEAK BOOST: <b class="font-mono text-amber-400" id="peakFooterText">1.85 BAR</b></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-zinc-500 text-[11px]">POLLING RATE:</span>
+        <span class="font-mono font-bold text-[#3DDC84]">10.4 sps</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentUnit = 'BAR'; // 'BAR' or 'PSI'
+    let throttleVal = 55; // 0 - 100
+    let peakKPa = 245;
+    let activeTabId = 'turbo';
+
+    function setActiveTab(tab) {
+      activeTabId = tab;
+      const tabs = ['turbo', 'trans', 'offroad', 'dtc'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+        const content = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (t === tab) {
+          content.classList.remove('hidden');
+          btn.className = "px-3 py-1 rounded-md bg-amber-500 text-black font-bold transition";
+        } else {
+          content.classList.add('hidden');
+          btn.className = "px-3 py-1 rounded-md text-zinc-400 hover:text-white transition";
+        }
+      });
+      updateCluster();
+    }
+
+    function toggleUnit() {
+      currentUnit = currentUnit === 'BAR' ? 'PSI' : 'BAR';
+      document.getElementById('unitLabel').innerText = currentUnit;
+      document.getElementById('boostPill').innerText = currentUnit;
+      document.getElementById('boostUnitText').innerText = currentUnit;
+      document.getElementById('transBoostUnitText').innerText = currentUnit;
+      document.getElementById('offroadBoostUnitText').innerText = currentUnit;
+      updateCluster();
+    }
+
+    function onThrottleChange(val) {
+      throttleVal = parseFloat(val);
+      document.getElementById('throttleText').innerText = Math.round(throttleVal) + '%';
+      updateCluster();
+    }
+
+    function setThrottlePreset(val) {
+      document.getElementById('throttleSlider').value = val;
+      onThrottleChange(val);
+    }
+
+    function drawDial(canvasId, options) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = (w / 2) - 15;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const startAngle = (135 * Math.PI) / 180;
+      const sweepAngle = (270 * Math.PI) / 180;
+      const totalSpan = options.max - options.min;
+
+      // Track
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, startAngle, startAngle + sweepAngle);
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = '#181B22';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Negative Zone
+      if (options.zeroThreshold !== undefined) {
+        const zeroFraction = (options.zeroThreshold - options.min) / totalSpan;
+        const zeroAngle = startAngle + zeroFraction * sweepAngle;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, startAngle, zeroAngle);
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = '#00B0FF';
+        ctx.stroke();
+      }
+
+      // Redline Zone
+      if (options.dangerThreshold !== undefined) {
+        const dangerFraction = (options.dangerThreshold - options.min) / totalSpan;
+        const dangerAngle = startAngle + dangerFraction * sweepAngle;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, dangerAngle, startAngle + sweepAngle);
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = '#FF334B';
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Active Arc
+      const currentFraction = Math.max(0, Math.min(1, (options.value - options.min) / totalSpan));
+      const currentAngle = startAngle + currentFraction * sweepAngle;
+      if (currentFraction > 0.01) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, startAngle, currentAngle);
+        ctx.lineWidth = 9;
+        ctx.strokeStyle = (options.zeroThreshold !== undefined && options.value < options.zeroThreshold) ? '#00E5FF' : (options.activeColor || '#F5A623');
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Ticks
+      const tickCount = Math.round(totalSpan / options.majorStep);
+      for (let i = 0; i <= tickCount; i++) {
+        const tickVal = options.min + i * options.majorStep;
+        if (tickVal > options.max + 0.01) break;
+        const frac = (tickVal - options.min) / totalSpan;
+        const ang = startAngle + frac * sweepAngle;
+        const cosA = Math.cos(ang);
+        const sinA = Math.sin(ang);
+
+        const isDanger = options.dangerThreshold !== undefined && tickVal >= options.dangerThreshold;
+        const isVac = options.zeroThreshold !== undefined && tickVal < options.zeroThreshold;
+        const tickColor = isDanger ? '#FF4444' : (isVac ? '#00E5FF' : '#A0AEC0');
+
+        ctx.beginPath();
+        ctx.moveTo(cx + (r - 12) * cosA, cy + (r - 12) * sinA);
+        ctx.lineTo(cx + r * cosA, cy + r * sinA);
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = tickColor;
+        ctx.stroke();
+
+        const textR = r - 25;
+        ctx.fillStyle = tickColor;
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const labelText = options.formatLabel ? options.formatLabel(tickVal) : tickVal.toFixed(0);
+        ctx.fillText(labelText, cx + textR * cosA, cy + textR * sinA);
+      }
+
+      // Needle
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(currentAngle - Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(0, -(r - 10));
+      ctx.lineTo(4, 0);
+      ctx.lineTo(0, 12);
+      ctx.closePath();
+
+      const needleColor = (options.dangerThreshold !== undefined && options.value >= options.dangerThreshold) ? '#FF4444' : (options.needleColor || '#F5A623');
+      ctx.fillStyle = needleColor;
+      ctx.shadowColor = needleColor;
+      ctx.shadowBlur = 6;
+      ctx.fill();
+      ctx.restore();
+
+      // Hub
+      ctx.beginPath();
+      ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+      ctx.fillStyle = '#222733';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#384257';
+      ctx.stroke();
+    }
+
+    function updateCluster() {
+      const frac = throttleVal / 100;
+
+      // Tachometer
+      const rpm = 800 + frac * 3500;
+      document.getElementById('tachValueText').innerText = Math.round(rpm).toLocaleString();
+      drawDial('tachCanvas', {
+        min: 0, max: 6000, value: rpm, majorStep: 1000, dangerThreshold: 4500,
+        formatLabel: (v) => (v / 1000).toFixed(0), activeColor: '#F5A623'
+      });
+
+      // Boost
+      const boostKPa = 95 + frac * 165;
+      if (boostKPa > peakKPa) peakKPa = boostKPa;
+
+      const boostBar = (boostKPa - 100) / 100;
+      const boostPsi = boostBar * 14.5038;
+      const peakBar = (peakKPa - 100) / 100;
+      const peakPsi = peakBar * 14.5038;
+
+      const isBar = currentUnit === 'BAR';
+      const boostVal = isBar ? boostBar : boostPsi;
+      const peakVal = isBar ? peakBar : peakPsi;
+      const sign = boostVal >= 0 ? '+' : '';
+
+      const boostStr = sign + boostVal.toFixed(isBar ? 2 : 1);
+      document.getElementById('boostValueText').innerText = boostStr;
+      document.getElementById('transBoostValueText').innerText = boostStr;
+      document.getElementById('offroadBoostValueText').innerText = boostStr;
+
+      document.getElementById('boostPeakText').innerText = 'PK ' + (peakVal >= 0 ? '+' : '') + peakVal.toFixed(isBar ? 2 : 1);
+      document.getElementById('peakFooterText').innerText = (peakVal >= 0 ? '+' : '') + peakVal.toFixed(isBar ? 2 : 1) + ' ' + currentUnit;
+
+      const boostOpts = {
+        min: isBar ? -1.0 : -15, max: isBar ? 2.5 : 35, value: boostVal, peak: peakVal,
+        zeroThreshold: 0, majorStep: isBar ? 0.5 : 10, dangerThreshold: isBar ? 2.2 : 31,
+        formatLabel: (v) => isBar ? v.toFixed(1) : v.toFixed(0), activeColor: '#F5A623'
+      };
+
+      drawDial('boostCanvas', boostOpts);
+      drawDial('transBoostCanvas', boostOpts);
+      drawDial('offroadBoostCanvas', boostOpts);
+
+      // Speedometer
+      const speed = frac * 135;
+      document.getElementById('speedValueText').innerText = Math.round(speed);
+      drawDial('speedCanvas', {
+        min: 0, max: 220, value: speed, majorStep: 20, dangerThreshold: 180,
+        formatLabel: (v) => v.toFixed(0), activeColor: '#00E5FF', needleColor: '#00E5FF'
+      });
+
+      // Turbo Telemetry
+      const egt = 310 + frac * 470;
+      document.getElementById('egtVal').innerText = Math.round(egt) + ' °C';
+      document.getElementById('egtBar').style.width = ((egt - 200) / 700 * 100) + '%';
+
+      const chargeAir = 30 + frac * 28;
+      document.getElementById('chargeAirVal').innerText = Math.round(chargeAir) + ' °C';
+      document.getElementById('chargeAirBar').style.width = (chargeAir / 90 * 100) + '%';
+
+      const vgt = 35 + frac * 55;
+      document.getElementById('vgtVal').innerText = Math.round(vgt) + ' %';
+      document.getElementById('vgtBar').style.width = vgt + '%';
+
+      const torque = Math.round(110 + frac * 470);
+      document.getElementById('torqueVal').innerText = torque + ' Nm';
+      document.getElementById('torqueBar').style.width = (torque / 650 * 100) + '%';
+      document.getElementById('transTorqueDisplay').innerHTML = torque + ' <span class="text-xs text-amber-400">Nm</span>';
+      document.getElementById('offroadTorque').innerText = torque + ' Nm';
+
+      // ZF 8HP Telemetry
+      const gear = speed < 15 ? "D1" : (speed < 32 ? "D2" : (speed < 50 ? "D3" : (speed < 70 ? "D4" : (speed < 92 ? "D5" : (speed < 112 ? "D6" : (speed < 130 ? "D7" : "D8"))))));
+      document.getElementById('gearDisplay').innerText = gear;
+
+      const isSlipping = frac > 0.85 && speed < 50;
+      const lockupBadge = document.getElementById('lockupBadge');
+      if (isSlipping) {
+        lockupBadge.innerText = "LOCKUP: SLIP";
+        lockupBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 border border-amber-500 text-amber-400";
+      } else {
+        lockupBadge.innerText = "LOCKUP: LOCKED";
+        lockupBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-[#3DDC84]/20 border border-[#3DDC84] text-[#3DDC84]";
+      }
+
+      const atf = 82 + frac * 14;
+      document.getElementById('atfTempDisplay').innerText = Math.round(atf) + ' °C';
+      document.getElementById('atfBar').style.width = ((atf - 40) / 80 * 100) + '%';
+
+      const coolant = Math.round(88 + frac * 8);
+      document.getElementById('transCoolant').innerText = coolant + ' °C';
+      const oil = Math.round(92 + frac * 14);
+      document.getElementById('transOil').innerText = oil + ' °C';
+
+      // 4Motion Telemetry
+      const steer = Math.round(frac * 30 - 15);
+      document.getElementById('offroadSteering').innerText = (steer > 0 ? 'R ' : (steer < 0 ? 'L ' : '')) + Math.abs(steer) + '°';
+
+      const pitch = Math.round(frac * 18 - 4);
+      document.getElementById('offroadPitch').innerText = (pitch > 0 ? '+' : '-') + Math.abs(pitch) + '°';
+
+      const slip = (frac * 8.5).toFixed(1);
+      document.getElementById('offroadSlipVal').innerText = slip + ' %';
+      document.getElementById('offroadSlipBar').style.width = (slip / 30 * 100) + '%';
+
+      const battery = (14.2 - frac * 0.3).toFixed(1);
+      document.getElementById('offroadBattery').innerText = battery + ' V';
+
+      const fuel = (1.4 + frac * 13.8).toFixed(1);
+      document.getElementById('fuelText').innerText = fuel + ' L/h';
+    }
+
+    function scanDtc() {
+      const btn = document.getElementById('scanBtn');
+      const bar = document.getElementById('scanProgressBar');
+      const fill = document.getElementById('scanProgressFill');
+      btn.disabled = true;
+      btn.innerText = "SCANNING...";
+      bar.classList.remove('hidden');
+      fill.style.width = '0%';
+      let prog = 0;
+      const interval = setInterval(() => {
+        prog += 20;
+        fill.style.width = prog + '%';
+        if (prog >= 100) {
+          clearInterval(interval);
+          setTimeout(() => {
+            bar.classList.add('hidden');
+            btn.disabled = false;
+            btn.innerText = "SCAN ECU";
+          }, 300);
+        }
+      }, 150);
+    }
+
+    function clearDtc() {
+      if (confirm("Clear all ECU Diagnostic Trouble Codes (Mode 04)? This will reset stored codes and turn off MIL.")) {
+        document.getElementById('dtcList').classList.add('hidden');
+        document.getElementById('noCodesBanner').classList.remove('hidden');
+        document.getElementById('dtcBanner').classList.add('hidden');
+        document.getElementById('tabDtc').innerText = "DTCs (0)";
+      }
+    }
+
+    window.onload = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get('tab') || window.location.hash.replace('#', '');
+      if (tab && ['turbo', 'trans', 'offroad', 'dtc'].includes(tab)) {
+        setActiveTab(tab);
+      } else {
+        updateCluster();
+      }
+    };
+  </script>
+</body>
+</html>
