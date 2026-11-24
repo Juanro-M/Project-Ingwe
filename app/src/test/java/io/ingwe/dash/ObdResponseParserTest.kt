@@ -52,6 +52,39 @@ class ObdResponseParserTest {
         assertEquals(14.1, v!!, 0.01)
     }
 
+    @Test fun `parse VIN with ELM header line`() {
+        val result = ObdResponseParser.parse(
+            listOf("014", "7E8 10 14 49 02 01 31 56 57", "7E8 21 46 45 32 31 43 30 34", "7E8 22 4D 30 30 30 30 30 31", ">")
+        )
+        val s = result as ObdResponseParser.ObdResult.Success
+        assertEquals(0x09, s.serviceId)
+        assertEquals(0x02, s.pid)
+    }
+
+    @Test fun `parse UDS negative response`() {
+        val result = ObdResponseParser.parse(listOf("7E8 03 7F 22 31", ">"))
+        assertTrue(result is ObdResponseParser.ObdResult.Error)
+        assertTrue((result as ObdResponseParser.ObdResult.Error).message.contains("0x31"))
+    }
+
+    @Test fun `formula returns null when referenced byte is missing`() {
+        // EGT formula needs C and D; a 2-byte response must not silently read them as 0.
+        assertNull(ObdResponseParser.applyFormula("((C*256)+D)*0.1-40", byteArrayOf(0x11, 0x00)))
+    }
+
+    @Test fun `formula with decimal multiplier`() {
+        val v = ObdResponseParser.applyFormula("((A*256)+B)*0.05", byteArrayOf(0x00, 0x1E))
+        assertEquals(1.5, v!!, 0.0001)
+    }
+
+    @Test fun `SimpleExprEval - rejects malformed input`() {
+        assertThrows(IllegalArgumentException::class.java) { SimpleExprEval.eval("(1+2") }
+        assertThrows(IllegalArgumentException::class.java) { SimpleExprEval.eval("1+2)") }
+        assertThrows(IllegalArgumentException::class.java) { SimpleExprEval.eval("1/0") }
+        assertThrows(IllegalArgumentException::class.java) { SimpleExprEval.eval("E-40") }
+        assertEquals(-5.0, SimpleExprEval.eval("-(2+3)"), 0.001)
+    }
+
     @Test fun `SimpleExprEval - basic arithmetic`() {
         assertEquals(85.0,  SimpleExprEval.eval("125-40"), 0.001)
         assertEquals(841.0, SimpleExprEval.eval("((13*256)+36)/4"), 0.001)

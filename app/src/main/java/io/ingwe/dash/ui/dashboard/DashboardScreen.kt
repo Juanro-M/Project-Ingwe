@@ -2,597 +2,232 @@ package io.ingwe.dash.ui.dashboard
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import io.ingwe.dash.ui.components.gauges.*
+import io.ingwe.dash.ui.dtc.FaultStore
 import io.ingwe.dash.ui.navigation.Screen
 import io.ingwe.dash.ui.theme.*
 
+private enum class ClusterView(val label: String) {
+    CLUSTER("Cluster"),
+    DRIVELINE("Driveline"),
+    OFFROAD("Off-road"),
+}
+
 /**
- * Modern Motorsport & OEM Instrument Cluster Dashboard for VW Amarok.
+ * Main instrument cluster for the VW Amarok 3.0 V6 TDI.
  *
- * Dedicated Views:
- *   1. TURBO & CLUSTER: Tachometer, Boost Gauge (BAR/PSI with Target vs Actual), Speedometer, EGT, Charge Air, VGT
- *   2. ZF DRIVELINE: Gear (D1-D8), Torque Converter Lockup, ATF Fluid Temp, Engine Torque (Nm), Load
- *   3. 4MOTION OFF-ROAD: Steering Angle, Pitch & Roll Inclinometers, Wheel Slip Differential
+ * Views:
+ *   Cluster   — tacho, boost, speed; VGT / coolant / oil sub-dials; EGT, charge air, torque, battery
+ *   Driveline — boost; ZF 8HP gear, lockup, ATF; coolant & oil
+ *   Off-road  — boost; 4Motion steering / pitch / roll visuals, per-wheel slip, diff state, torque split
+ *
+ * M1: values come from [SimulatedVehicle], driven by the demo throttle.
  */
 @Composable
-fun DashboardScreen(navController: NavController) {
+fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
+    var boostUnit by rememberSaveable { mutableStateOf(BoostUnit.BAR) }
+    var view by rememberSaveable { mutableStateOf(ClusterView.CLUSTER) }
+    var throttle by rememberSaveable { mutableFloatStateOf(0.55f) }
+    var showDemoControls by rememberSaveable { mutableStateOf(false) }
 
-    // Boost configuration: unit toggle (BAR vs PSI)
-    var boostUnit by remember { mutableStateOf(BoostUnit.BAR) }
+    val car = remember(throttle) { SimulatedVehicle.at(throttle) }
 
-    // Dashboard view modes: "TURBO", "DRIVELINE", "OFFROAD"
-    var activeTab by remember { mutableStateOf("TURBO") }
-
-    // Simulation / throttle state (0f = Idle, 1f = Full Throttle Boost)
-    var throttleInput by remember { mutableFloatStateOf(0.55f) }
-    var showSimControls by remember { mutableStateOf(false) }
-
-    // Simulated dynamic engine & vehicle parameters
-    val simulatedRpm = 800f + throttleInput * 3500f
-    val simulatedBoostKPa = 95f + throttleInput * 165f // Actual Boost: -0.05 bar up to +1.60 bar (23.2 PSI)
-    val simulatedTargetBoostKPa = 100f + throttleInput * 170f // Target Boost commanded by ECM
-    val simulatedSpeed = throttleInput * 135f
-    val simulatedLoad = (15f + throttleInput * 75f).coerceIn(0f, 100f)
-    val simulatedCoolant = 88f + (throttleInput * 8f)
-    val simulatedOil = 92f + (throttleInput * 14f)
-    val simulatedBattery = 14.2f - (throttleInput * 0.3f)
-    val simulatedFuelRate = 1.2f + throttleInput * 14.5f
-
-    // ── Turbo Data ──
-    val simulatedEgtC = 310f + throttleInput * 470f // 310°C idle up to 780°C full pull
-    val simulatedChargeAirC = 30f + throttleInput * 28f // Intercooler outlet temp
-    val simulatedVgtDutyPct = 35f + throttleInput * 55f // VNT vane position
-
-    // ── ZF 8HP Driveline Data ──
-    val simulatedGear = when {
-        simulatedSpeed < 15f -> "D1"
-        simulatedSpeed < 32f -> "D2"
-        simulatedSpeed < 50f -> "D3"
-        simulatedSpeed < 70f -> "D4"
-        simulatedSpeed < 92f -> "D5"
-        simulatedSpeed < 112f -> "D6"
-        simulatedSpeed < 130f -> "D7"
-        else -> "D8"
-    }
-    val simulatedLockup = if (throttleInput > 0.85f && simulatedSpeed < 50f) "SLIP" else "LOCKED"
-    val simulatedAtfTemp = 82f + (throttleInput * 14f)
-    val simulatedTorqueNm = 110f + throttleInput * 470f // up to 580 Nm
-
-    // ── 4Motion Off-Road Data (#6) ──
-    val simulatedSteeringAngle = (throttleInput * 30f - 15f) // Steering angle in degrees
-    val simulatedPitch = (throttleInput * 18f - 4f)         // Inclinometer Pitch angle
-    val simulatedRoll = 6f                                  // Inclinometer Roll angle
-    val simulatedWheelSlip = (throttleInput * 8.5f)         // Slip %
-
-    // Peak boost tracking (in kPa abs)
-    var peakBoostKPa by remember { mutableFloatStateOf(245f) }
-    if (simulatedBoostKPa > peakBoostKPa) {
-        peakBoostKPa = simulatedBoostKPa
+    // Peak hold is updated as a side effect, never during composition.
+    var peakBoostKPa by rememberSaveable { mutableFloatStateOf(car.boostKPa) }
+    LaunchedEffect(car.boostKPa) {
+        if (car.boostKPa > peakBoostKPa) peakBoostKPa = car.boostKPa
     }
 
-    val activeDtcCount = 3
-    val sampleRate = "10.4 sps"
+    val faults = faultStore.codes
 
-    Box(
-        modifier = Modifier
+    Column(
+        Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0C0E12),
-                        Color(0xFF07080A),
-                        Color(0xFF050507)
-                    )
-                )
-            )
+            .background(IngweBackground)
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp, vertical = 14.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            // ── Top Navigation & Vehicle Header ────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusChip(label = "OBD-II LIVE", isConnected = true)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "VW AMAROK 3.0 V6 TDI",
-                        color = IngweOnSurface.copy(alpha = 0.85f),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        letterSpacing = 2.sp
-                    )
-                }
-
-                // Cockpit Page Switcher Tabs
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier
-                        .background(Color(0xFF141720), shape = RoundedCornerShape(8.dp))
-                        .padding(2.dp)
-                ) {
-                    listOf(
-                        "TURBO" to "TURBO CLUSTER",
-                        "DRIVELINE" to "ZF 8HP",
-                        "OFFROAD" to "4MOTION"
-                    ).forEach { (key, label) ->
-                        val selected = activeTab == key
-                        Surface(
-                            color = if (selected) IngwePrimary else Color.Transparent,
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.clickable { activeTab = key }
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (selected) IngweOnPrimary else IngweOnSurface.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Unit & Sim Toggles
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = Color(0xFF161A22),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2A313E)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.clickable {
-                            boostUnit = if (boostUnit == BoostUnit.BAR) BoostUnit.PSI else BoostUnit.BAR
-                        }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "BOOST: ", color = IngweOnSurface.copy(alpha = 0.5f), fontSize = 11.sp)
-                            Text(text = boostUnit.label, color = IngwePrimary, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
-                            Spacer(Modifier.width(4.dp))
-                            Text(text = "/", color = IngweOnSurface.copy(alpha = 0.7f), fontSize = 12.sp)
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Surface(
-                        color = if (showSimControls) IngwePrimary.copy(alpha = 0.2f) else Color(0xFF161A22),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (showSimControls) IngwePrimary else Color(0xFF2A313E)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.clickable { showSimControls = !showSimControls }
-                    ) {
-                        Text(
-                            text = if (showSimControls) "TEST: ON" else "TEST: OFF",
-                            color = if (showSimControls) IngwePrimary else IngweOnSurface.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
+        // ── Header ────────────────────────────────────────────────────────────
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Amarok 3.0 V6 TDI", style = LabelStyle.copy(fontSize = 14.sp), color = IngweTextPrimary)
+                Spacer(Modifier.height(2.dp))
+                StatusDot(text = "Demo data · ECU 7E0", color = IngweCaution)
             }
 
-            Spacer(Modifier.height(8.dp))
+            ViewTabs(selected = view, onSelect = { view = it })
 
-            // ── DTC Fault Alert Banner ─────────────────────────────────────
-            Surface(
-                color = if (activeDtcCount > 0) Color(0xFF2D1414) else Color(0xFF102016),
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (activeDtcCount > 0) IngweError.copy(alpha = 0.7f) else IngweSecondary.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
+            Row(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SegmentedControl(
+                    options = listOf(BoostUnit.BAR to "bar", BoostUnit.PSI to "psi"),
+                    selected = boostUnit,
+                    onSelect = { boostUnit = it },
+                )
+                HeaderLink(
+                    text = if (faults.isEmpty()) "Faults" else "Faults  ${faults.size}",
+                    color = if (faults.isEmpty()) IngweTextSecondary else IngweAlert,
+                    onClick = { navController.navigate(Screen.Dtc.route) },
+                )
+                HeaderLink("Terminal", IngweTextSecondary) { navController.navigate(Screen.Terminal.route) }
+                HeaderLink(
+                    text = "Demo",
+                    color = if (showDemoControls) IngweAccent else IngweTextSecondary,
+                    onClick = { showDemoControls = !showDemoControls },
+                )
+            }
+        }
+
+        // ── Fault notice ─────────────────────────────────────────────────────
+        if (faults.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(IngweSurface)
                     .clickable { navController.navigate(Screen.Dtc.route) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (activeDtcCount > 0) IngweError else IngweSecondary)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (activeDtcCount > 0)
-                                "WARNING: $activeDtcCount ERROR CODES DETECTED: P0299, P0401, P2002"
-                            else
-                                "SYSTEMS NORMAL - NO FAULT CODES STORED",
-                            color = if (activeDtcCount > 0) Color(0xFFFF8A80) else IngweSecondary,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
-                            maxLines = 1
-                        )
-                    }
-
-                    Text(
-                        text = "VIEW & CLEAR DTCs",
-                        color = if (activeDtcCount > 0) IngweError else IngweSecondary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-
-            // Interactive simulation throttle controls
-            AnimatedVisibility(visible = showSimControls) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp)
-                        .background(Color(0xFF141720), shape = RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "SIMULATED THROTTLE & LOAD DRIVE:",
-                            color = IngweOnSurface.copy(alpha = 0.7f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("IDLE" to 0.05f, "CRUISE" to 0.40f, "BOOST" to 0.75f, "WOT" to 1.0f).forEach { (lbl, preset) ->
-                                Surface(
-                                    color = if (kotlin.math.abs(throttleInput - preset) < 0.08f) IngwePrimary else Color(0xFF1F2430),
-                                    shape = RoundedCornerShape(4.dp),
-                                    modifier = Modifier.clickable { throttleInput = preset }
-                                ) {
-                                    Text(
-                                        text = lbl,
-                                        color = if (kotlin.math.abs(throttleInput - preset) < 0.08f) IngweOnPrimary else IngweOnSurface,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Slider(
-                        value = throttleInput,
-                        onValueChange = { throttleInput = it },
-                        valueRange = 0f..1f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = IngwePrimary,
-                            activeTrackColor = IngwePrimary,
-                            inactiveTrackColor = Color(0xFF2B313F)
-                        ),
-                        modifier = Modifier.height(28.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // ── Primary View Body ──────────────────────────────────────────
-            when (activeTab) {
-                "TURBO" -> {
-                    // 1. TURBO & CLUSTER VIEW
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Left: Tachometer
-                        TachometerGauge(
-                            rpm = simulatedRpm,
-                            size = 195.dp,
-                            peakRpm = 4200f
-                        )
-
-                        // Center: Boost Gauge with Bar / PSI toggle
-                        BoostGauge(
-                            boostKPa = simulatedBoostKPa,
-                            unit = boostUnit,
-                            onToggleUnit = {
-                                boostUnit = if (boostUnit == BoostUnit.BAR) BoostUnit.PSI else BoostUnit.BAR
-                            },
-                            size = 215.dp,
-                            peakKPa = peakBoostKPa
-                        )
-
-                        // Right: Speedometer
-                        SpeedometerGauge(
-                            speedKmH = simulatedSpeed,
-                            size = 195.dp
-                        )
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    // Turbo & Thermal Aux telemetry pods
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        CompactArcMeter(
-                            label = "EGT PRE-TURBO",
-                            value = simulatedEgtC,
-                            unit = "°C",
-                            min = 200f,
-                            max = 900f,
-                            warnMax = 720f,
-                            dangerMax = 780f,
-                            customColor = IngwePrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        CompactArcMeter(
-                            label = "CHARGE AIR",
-                            value = simulatedChargeAirC,
-                            unit = "°C",
-                            min = 0f,
-                            max = 90f,
-                            warnMax = 55f,
-                            dangerMax = 70f,
-                            customColor = Color(0xFF00E5FF),
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        CompactArcMeter(
-                            label = "VGT VANE POS",
-                            value = simulatedVgtDutyPct,
-                            unit = "%",
-                            min = 0f,
-                            max = 100f,
-                            customColor = IngweSecondary,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        CompactArcMeter(
-                            label = "ENG TORQUE",
-                            value = simulatedTorqueNm,
-                            unit = "Nm",
-                            min = 0f,
-                            max = 650f,
-                            warnMax = 580f,
-                            customColor = IngwePrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                "DRIVELINE" -> {
-                    // 2. ZF 8HP DRIVELINE VIEW
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Left: Big Boost Gauge
-                        BoostGauge(
-                            boostKPa = simulatedBoostKPa,
-                            unit = boostUnit,
-                            onToggleUnit = {
-                                boostUnit = if (boostUnit == BoostUnit.BAR) BoostUnit.PSI else BoostUnit.BAR
-                            },
-                            size = 210.dp,
-                            peakKPa = peakBoostKPa,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        // Right: Full ZF 8HP Status Card
-                        Column(
-                            modifier = Modifier.weight(1.3f),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            TransmissionDrivelineCard(
-                                gear = simulatedGear,
-                                lockupState = simulatedLockup,
-                                atfTempC = simulatedAtfTemp,
-                                engineTorqueNm = simulatedTorqueNm
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                CompactArcMeter(
-                                    label = "COOLANT",
-                                    value = simulatedCoolant,
-                                    unit = "°C",
-                                    min = 50f,
-                                    max = 130f,
-                                    normalMin = 80f,
-                                    normalMax = 98f,
-                                    warnMax = 105f,
-                                    dangerMax = 115f,
-                                    customColor = IngweSecondary,
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                CompactArcMeter(
-                                    label = "OIL TEMP",
-                                    value = simulatedOil,
-                                    unit = "°C",
-                                    min = 50f,
-                                    max = 150f,
-                                    normalMin = 85f,
-                                    normalMax = 110f,
-                                    warnMax = 125f,
-                                    dangerMax = 138f,
-                                    customColor = IngwePrimary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                "OFFROAD" -> {
-                    // 3. 4MOTION OFF-ROAD VIEW (#6)
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Left: Speed & Tach small combo
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            BoostGauge(
-                                boostKPa = simulatedBoostKPa,
-                                unit = boostUnit,
-                                onToggleUnit = {
-                                    boostUnit = if (boostUnit == BoostUnit.BAR) BoostUnit.PSI else BoostUnit.BAR
-                                },
-                                size = 185.dp,
-                                peakKPa = peakBoostKPa
-                            )
-                        }
-
-                        // Right: Off-Road Telemetry Card
-                        Column(
-                            modifier = Modifier.weight(1.4f),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OffRoadTelemetryCard(
-                                steeringAngleDeg = simulatedSteeringAngle,
-                                pitchDeg = simulatedPitch,
-                                rollDeg = simulatedRoll,
-                                wheelSlipPct = simulatedWheelSlip
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                CompactArcMeter(
-                                    label = "ENG TORQUE",
-                                    value = simulatedTorqueNm,
-                                    unit = "Nm",
-                                    min = 0f,
-                                    max = 650f,
-                                    customColor = IngwePrimary,
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                CompactArcMeter(
-                                    label = "BATTERY",
-                                    value = simulatedBattery,
-                                    unit = "V",
-                                    min = 10f,
-                                    max = 16f,
-                                    normalMin = 13f,
-                                    customColor = IngweSecondary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = IngweOutline)
-            Spacer(Modifier.height(6.dp))
-
-            // ── Bottom Navigation Bar ──────────────────────────────────────
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { navController.navigate(Screen.Terminal.route) },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = IngweOnSurface),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2C3240)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("TERMINAL", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
+                Box(Modifier.size(7.dp).clip(CircleShape).background(IngweAlert))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "${faults.size} fault code${if (faults.size == 1) "" else "s"} stored",
+                    style = LabelStyle.copy(fontSize = 13.sp),
+                    color = IngweTextPrimary,
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = faults.joinToString("  ") { it.code },
+                    style = ReadoutSmall.copy(fontSize = 13.sp),
+                    color = IngweTextSecondary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                )
+                Text("Review", style = LabelStyle.copy(fontSize = 13.sp), color = IngweAccent)
+            }
+        }
 
-                    Button(
-                        onClick = { navController.navigate(Screen.Dtc.route) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (activeDtcCount > 0) IngweError.copy(alpha = 0.25f) else Color(0xFF1E222C)
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (activeDtcCount > 0) IngweError else Color(0xFF2C3240)
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "DTCs",
-                                color = if (activeDtcCount > 0) IngweError else IngweOnSurface,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (activeDtcCount > 0) {
-                                Spacer(Modifier.width(6.dp))
-                                Surface(color = IngweError, shape = CircleShape) {
-                                    Text(
-                                        text = "$activeDtcCount",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+        // ── Demo throttle ────────────────────────────────────────────────────
+        AnimatedVisibility(visible = showDemoControls) {
+            DemoControls(throttle = throttle, onThrottle = { throttle = it })
+        }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "FUEL: ${"%.1f".format(simulatedFuelRate)} L/h",
-                        color = IngweOnSurface.copy(alpha = 0.6f),
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = sampleRate,
-                        color = IngweSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+        // ── Body ─────────────────────────────────────────────────────────────
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            when (view) {
+                ClusterView.CLUSTER -> ClusterBody(car, boostUnit, peakBoostKPa)
+                ClusterView.DRIVELINE -> DrivelineBody(car, boostUnit, peakBoostKPa)
+                ClusterView.OFFROAD -> OffRoadBody(car, boostUnit, peakBoostKPa)
+            }
+        }
+
+        // ── Footer ───────────────────────────────────────────────────────────
+        HorizontalDivider(color = IngweHairline)
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FooterStat("Fuel", "%.1f L/h".format(car.fuelRateLh))
+            FooterStat("Peak boost", "${formatBoost(boostFromKPa(peakBoostKPa, boostUnit), boostUnit)} ${boostUnit.label}")
+            Text(
+                "Reset peak",
+                style = LabelStyle,
+                color = IngweTextTertiary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { peakBoostKPa = car.boostKPa }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            FooterStat("Polling", "10.4 Hz")
+        }
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Views
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+@Composable
+private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TachometerGauge(rpm = car.rpm, size = 224.dp)
+            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 256.dp)
+            SpeedometerGauge(speedKmH = car.speedKmH, size = 224.dp)
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                LinearMeter("Exhaust gas, pre-turbo", car.egtC, "°C", 200f, 900f, cautionAt = 720f, alertAt = 780f)
+                LinearMeter("Charge air", car.chargeAirC, "°C", 0f, 90f, cautionAt = 55f, alertAt = 70f)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                VgtVaneGauge(positionPct = car.vgtPct)
+                CoolantGauge(tempC = car.coolantC)
+                OilTempGauge(tempC = car.oilC)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                LinearMeter("Engine torque", car.torqueNm, "Nm", 0f, 650f, cautionAt = 580f)
+                LinearMeter("Battery", car.batteryV, "V", 10f, 16f, coolBelow = 12.4f, format = "%.1f")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrivelineBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(32.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 290.dp)
+        }
+        Column(Modifier.weight(1.25f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            TransmissionPanel(
+                gear = car.gear,
+                lockup = car.lockup,
+                atfTempC = car.atfTempC,
+                engineTorqueNm = car.torqueNm,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Panel(Modifier.fillMaxWidth(), title = "Engine temperatures") {
+                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    LinearMeter("Coolant", car.coolantC, "°C", 50f, 130f, Modifier.weight(1f), coolBelow = 80f, cautionAt = 105f, alertAt = 115f)
+                    LinearMeter("Oil", car.oilC, "°C", 50f, 150f, Modifier.weight(1f), coolBelow = 85f, cautionAt = 125f, alertAt = 138f)
                 }
             }
         }
@@ -600,19 +235,184 @@ fun DashboardScreen(navController: NavController) {
 }
 
 @Composable
-private fun StatusChip(label: String, isConnected: Boolean) {
-    val color = if (isConnected) IngweSecondary else IngweError
-    Surface(
-        color = color.copy(alpha = 0.15f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.4f)),
-        shape = RoundedCornerShape(6.dp),
+private fun OffRoadBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(32.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            color = color,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 264.dp)
+        }
+        OffRoadPanel(
+            steeringAngleDeg = car.steeringDeg,
+            pitchDeg = car.pitchDeg,
+            rollDeg = car.rollDeg,
+            wheelSlip = car.wheelSlip,
+            rearDiff = car.rearDiff,
+            rearTorquePct = car.rearTorquePct,
+            modifier = Modifier.weight(1.7f),
         )
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Header / footer pieces
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+@Composable
+private fun ViewTabs(selected: ClusterView, onSelect: (ClusterView) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        ClusterView.entries.forEach { tab ->
+            val isSelected = tab == selected
+            Column(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onSelect(tab) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    tab.label,
+                    style = LabelStyle.copy(fontSize = 14.sp),
+                    color = if (isSelected) IngweTextPrimary else IngweTextTertiary,
+                )
+                Spacer(Modifier.height(5.dp))
+                Box(
+                    Modifier
+                        .width(18.dp)
+                        .height(2.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(if (isSelected) IngweAccent else Color.Transparent),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeaderLink(text: String, color: Color, onClick: () -> Unit) {
+    Text(
+        text = text,
+        style = LabelStyle.copy(fontSize = 13.sp),
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
+}
+
+@Composable
+private fun FooterStat(label: String, value: String) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(label, style = LabelStyle, color = IngweTextTertiary)
+        Spacer(Modifier.width(8.dp))
+        Text(value, style = ReadoutSmall.copy(fontSize = 13.sp), color = IngweTextSecondary)
+    }
+}
+
+@Composable
+private fun DemoControls(throttle: Float, onThrottle: (Float) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(IngweSurface)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Throttle", style = LabelStyle, color = IngweTextSecondary)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "%3d%%".format((throttle * 100).toInt()),
+            style = ReadoutSmall,
+            color = IngweTextPrimary,
+            modifier = Modifier.width(44.dp),
+        )
+        Slider(
+            value = throttle,
+            onValueChange = onThrottle,
+            valueRange = 0f..1f,
+            colors = SliderDefaults.colors(
+                thumbColor = IngweTextPrimary,
+                activeTrackColor = IngweAccent,
+                inactiveTrackColor = IngweHairline,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(16.dp))
+        SegmentedControl(
+            options = listOf(0.05f to "Idle", 0.40f to "Cruise", 0.75f to "Boost", 1.0f to "Full"),
+            selected = listOf(0.05f, 0.40f, 0.75f, 1.0f).firstOrNull { kotlin.math.abs(it - throttle) < 0.02f } ?: -1f,
+            onSelect = onThrottle,
+        )
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Simulation
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Plausible vehicle state for a given throttle position (0 = idle, 1 = full load). */
+internal data class SimulatedVehicle(
+    val rpm: Float,
+    val boostKPa: Float,
+    val speedKmH: Float,
+    val coolantC: Float,
+    val oilC: Float,
+    val batteryV: Float,
+    val fuelRateLh: Float,
+    val egtC: Float,
+    val chargeAirC: Float,
+    val vgtPct: Float,
+    val torqueNm: Float,
+    val gear: String,
+    val lockup: LockupState,
+    val atfTempC: Float,
+    val steeringDeg: Float,
+    val pitchDeg: Float,
+    val rollDeg: Float,
+    val wheelSlip: WheelSlip,
+    val rearDiff: DiffState,
+    val rearTorquePct: Float,
+) {
+    companion object {
+        private val GEAR_UPSHIFT_KMH = floatArrayOf(15f, 32f, 50f, 70f, 92f, 112f, 130f)
+
+        fun at(throttle: Float): SimulatedVehicle {
+            val t = throttle.coerceIn(0f, 1f)
+            val speed = t * 135f
+            val gearIndex = GEAR_UPSHIFT_KMH.indexOfFirst { speed < it }.let { if (it == -1) 8 else it + 1 }
+            // Rear wheels slip more under load; the Torsen centre diff biases torque
+            // away from the slipping axle (nominal 40:60). Rear locker engages at heavy load.
+            val slip = t * 18f
+            val wheels = WheelSlip(fl = slip * 0.45f, fr = slip * 0.6f, rl = slip * 0.95f, rr = slip * 1.15f)
+            val rearSlipBias = (wheels.rl + wheels.rr) / 2f - (wheels.fl + wheels.fr) / 2f
+            return SimulatedVehicle(
+                rpm = 800f + t * 3500f,
+                boostKPa = 95f + t * 165f,
+                speedKmH = speed,
+                coolantC = 88f + t * 8f,
+                oilC = 92f + t * 14f,
+                batteryV = 14.2f - t * 0.3f,
+                fuelRateLh = 1.2f + t * 14.5f,
+                egtC = 310f + t * 470f,
+                chargeAirC = 30f + t * 28f,
+                vgtPct = 35f + t * 55f,
+                torqueNm = 110f + t * 470f,
+                gear = "D$gearIndex",
+                // Converter unlocks under heavy load (the old `speed < 50` guard made this unreachable).
+                lockup = if (t > 0.9f) LockupState.SLIP else LockupState.LOCKED,
+                atfTempC = 82f + t * 14f,
+                steeringDeg = t * 30f - 15f,
+                pitchDeg = t * 18f - 4f,
+                rollDeg = t * 14f - 3f,
+                wheelSlip = wheels,
+                rearDiff = if (t > 0.8f) DiffState.LOCKED else DiffState.OPEN,
+                rearTorquePct = (60f - rearSlipBias * 1.5f).coerceIn(35f, 65f),
+            )
+        }
     }
 }

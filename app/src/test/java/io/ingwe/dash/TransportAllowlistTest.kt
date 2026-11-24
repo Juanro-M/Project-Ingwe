@@ -28,7 +28,21 @@ class TransportAllowlistTest {
     @Test fun `mode 2F UDS IO control is blocked`() = assertBlocked("2F")
     @Test fun `mode 31 UDS routine control is blocked`() = assertBlocked("31")
 
+    // ── Bypass attempts ───────────────────────────────────────────────────────
+    // The ELM327 ignores whitespace, so these all reach the ECU as Mode 04.
+
+    @Test fun `mode 04 split by a space is blocked`() = assertBlocked("0 4")
+    @Test fun `mode 04 split by a tab is blocked`() = assertBlocked("0\t4")
+    @Test fun `mode 04 with leading spaces is blocked`() = assertBlocked("   04")
+    @Test fun `UDS 0x14 split by spaces is blocked`() = assertBlocked("1 4 FF FF FF")
+    @Test fun `single hex digit is rejected`() = assertBlocked("4")
+    @Test fun `non-hex garbage is rejected`() = assertBlocked("Z4")
+    @Test fun `empty command is rejected`() = assertBlocked("   ")
+
     // ── Allowed services ──────────────────────────────────────────────────────
+
+    @Test fun `mode 01 with spaces is allowed`() = assertAllowed("01 0C 1")
+    @Test fun `lowercase AT command is allowed`() = assertAllowed("atz")
 
     @Test fun `mode 01 live data is allowed`() = assertAllowed("010C1")
     @Test fun `mode 03 stored DTCs is allowed`() = assertAllowed("03")

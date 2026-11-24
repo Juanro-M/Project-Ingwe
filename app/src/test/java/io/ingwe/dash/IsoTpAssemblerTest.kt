@@ -47,6 +47,33 @@ class IsoTpAssemblerTest {
         assertEquals(0x01.toByte(), payload[2])
     }
 
+    @Test fun `ELM byte-count header line before multi-frame is ignored`() {
+        // MockTransport (and real ELMs) emit "014" before the First Frame.
+        // This used to be misread as a First Frame and crash with IndexOutOfBounds.
+        val asm = IsoTpAssembler()
+        asm.feed("014")
+        assertFalse(asm.isComplete)
+        asm.feed("7E8 10 14 49 02 01 31 56 57")
+        asm.feed("7E8 21 46 45 32 31 43 30 34")
+        asm.feed("7E8 22 4D 30 30 30 30 30 31")
+        assertTrue(asm.isComplete)
+        assertEquals(20, asm.payload().size)
+    }
+
+    @Test fun `out-of-sequence consecutive frame is dropped`() {
+        val asm = IsoTpAssembler()
+        asm.feed("7E8 10 14 49 02 01 31 56 57")
+        asm.feed("7E8 22 4D 30 30 30 30 30 31") // SN=2 arrives before SN=1
+        assertFalse(asm.isComplete)
+    }
+
+    @Test fun `consecutive frame without first frame is ignored`() {
+        val asm = IsoTpAssembler()
+        asm.feed("7E8 21 46 45 32 31 43 30 34")
+        assertFalse(asm.isComplete)
+        assertEquals(0, asm.payload().size)
+    }
+
     @Test fun `non-hex lines are ignored`() {
         val asm = IsoTpAssembler()
         asm.feed("SEARCHING...")

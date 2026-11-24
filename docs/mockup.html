@@ -1,699 +1,880 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>AmarokDash Digital Cockpit Preview</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
-  <style>
-    input[type=range]::-webkit-slider-thumb {
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #F5A623;
-      cursor: pointer;
-      box-shadow: 0 0 8px #F5A623;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AmarokDash — cluster preview</title>
+<style>
+  :root {
+    --bg: #0B0B0C;
+    --surface: #141416;
+    --surface-high: #1C1C1F;
+    --hairline: #26262A;
+    --text: #EDEDEF;
+    --text-2: #9A9AA1;
+    --text-3: #5E5E66;
+    --accent: #FFA43A;
+    --teal: #3CCFB8;
+    --caution: #FFC857;
+    --alert: #FF5A4F;
+    --cool: #6FB6FF;
+    --on-accent: #1A1206;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #050506; }
+  body {
+    font: 500 12px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding: 24px 16px;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  [hidden] { display: none !important; }
+
+  /* Head unit frame: 1280×720 logical, scales down on small screens */
+  .unit {
+    max-width: 1280px; margin: 0 auto;
+    aspect-ratio: 16 / 9;
+    background: var(--bg);
+    border-radius: 18px;
+    padding: 14px 24px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .caption { max-width: 1280px; margin: 12px auto 0; color: var(--text-3); font-size: 12px; }
+
+  /* Header */
+  header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+  .vehicle { font-size: 14px; }
+  .status { display: flex; align-items: center; gap: 6px; color: var(--text); margin-top: 2px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { padding: 6px 14px; border-radius: 8px; font-size: 14px; color: var(--text-3); display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .tab::after { content: ""; width: 18px; height: 2px; border-radius: 1px; background: transparent; }
+  .tab[aria-selected="true"] { color: var(--text); }
+  .tab[aria-selected="true"]::after { background: var(--accent); }
+  .tab:hover { color: var(--text-2); }
+  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+  .link { font-size: 13px; color: var(--text-2); padding: 6px 8px; border-radius: 8px; }
+  .link:hover { background: var(--surface); }
+  .link.alert { color: var(--alert); }
+  .link.on { color: var(--accent); }
+
+  .seg { display: inline-flex; background: var(--surface); border-radius: 8px; padding: 2px; }
+  .seg button { padding: 5px 10px; border-radius: 6px; color: var(--text-3); }
+  .seg button[aria-pressed="true"] { background: var(--surface-high); color: var(--text); }
+
+  /* Fault notice */
+  .notice {
+    margin-top: 12px; display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border-radius: 10px; padding: 10px 16px; cursor: pointer; font-size: 13px;
+  }
+  .notice .codes { color: var(--text-2); flex: 1; }
+  .notice .go { color: var(--accent); }
+
+  /* Demo controls */
+  .demo { margin-top: 12px; display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 10px; padding: 8px 16px; }
+  .demo[hidden] { display: none; }
+  .demo label { color: var(--text-2); }
+  .demo output { width: 44px; font-size: 15px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 20px; }
+
+  /* Body */
+  main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  section.view { flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; min-height: 0; }
+  .view[hidden] { display: none; }
+  .dials { display: flex; justify-content: space-evenly; align-items: center; }
+  .dial { position: relative; }
+  .dial canvas { display: block; }
+  .dial .readout { position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; pointer-events: none; }
+  .dial .value { font-weight: 300; letter-spacing: -0.5px; line-height: 1.1; }
+  .dial .value.alert { color: var(--alert); }
+  .dial .label { color: var(--text-2); }
+
+  .subrow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 32px; align-items: center; }
+  .subrow .col { display: flex; flex-direction: column; gap: 18px; }
+  .subdials { display: flex; gap: 20px; align-items: flex-start; }
+  .dial.vgt { width: 124px; height: 124px; }
+  .dial.compact .readout { top: 50%; bottom: auto; transform: translateY(-38%); }
+  .dial.compact .name { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; color: var(--text-2); }
+  .vgt-eye { position: absolute; left: 0; right: 0; top: calc(50% - 7px); transform: translateY(-50%); text-align: center; font-size: 16px; }
+  .vgt-eye small { color: var(--text-3); font-size: 10px; margin-left: 1px; }
+
+  /* 4Motion */
+  .angles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .angle { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+  .angle .k { color: var(--text-2); }
+  .angle canvas { display: block; width: 100%; height: 78px; margin: 4px 0; }
+  .angle .v { font-size: 22px; }
+  .angle .u { color: var(--text-3); margin-left: 6px; }
+  .drivetrain { display: flex; align-items: center; gap: 24px; margin-top: 14px; }
+  .chassis { display: flex; align-items: center; gap: 8px; }
+  .chassis .labels { height: 150px; padding: 30px 0 12px; display: flex; flex-direction: column; justify-content: space-between; font-size: 15px; color: var(--text-2); }
+  .chassis .labels.left { text-align: right; }
+  .chassis .mid { text-align: center; color: var(--text-3); }
+  .dt-info { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+  .sline { display: flex; align-items: center; }
+  .sline .k { flex: 1; color: var(--text-2); }
+  .split-head { display: flex; justify-content: space-between; color: var(--text-3); margin-bottom: 6px; }
+  .splitbar { display: flex; gap: 2px; height: 3px; border-radius: 2px; overflow: hidden; }
+  .splitbar i { display: block; height: 100%; transition: flex-grow .2s; }
+  .meter-head { display: flex; align-items: baseline; gap: 3px; }
+  .meter-head .name { flex: 1; color: var(--text-2); }
+  .meter-head .v { font-size: 15px; }
+  .meter-head .u { color: var(--text-3); }
+  .bar { margin-top: 8px; height: 3px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--text-2); transition: width .2s, background .2s; }
+
+  .split { display: grid; grid-template-columns: 1fr 1.25fr; gap: 32px; align-items: center; }
+  section[data-view="offroad"] .split { grid-template-columns: 1fr 1.7fr; }
+  .split .dial { justify-self: center; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .panel { background: var(--surface); border-radius: 14px; padding: 16px 18px; }
+  .panel-head { display: flex; align-items: center; margin-bottom: 14px; }
+  .panel-head .title { flex: 1; color: var(--text-2); }
+  .stats { display: flex; align-items: flex-end; margin-bottom: 18px; }
+  .stat { flex: 1; }
+  .stat .k { color: var(--text-2); margin-bottom: 4px; }
+  .stat .v { font-size: 22px; font-weight: 400; }
+  .stat .v.large { font-size: 44px; font-weight: 300; letter-spacing: -0.5px; line-height: 1; }
+  .stat .u { color: var(--text-3); margin-left: 4px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+
+  /* Faults view */
+  .faults-head { display: flex; align-items: center; gap: 8px; }
+  .faults-head h1 { font-size: 20px; font-weight: 500; margin: 0; }
+  .faults-head .sub { color: var(--text-3); }
+  .faults-head .grow { flex: 1; }
+  .btn { padding: 9px 14px; border-radius: 8px; background: var(--surface-high); font-size: 13px; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.destructive { color: var(--alert); }
+  .btn:disabled { color: var(--text-3); background: var(--surface-high); cursor: default; }
+  .faults-bar { display: flex; align-items: center; margin: 16px 0 10px; }
+  .faults-bar .grow { flex: 1; }
+  .progress { height: 2px; background: var(--hairline); margin-bottom: 10px; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .12s; }
+  .list { background: var(--surface); border-radius: 14px; overflow: auto; flex: 0 1 auto; min-height: 0; }
+  .row { padding: 16px 18px; cursor: pointer; }
+  .row + .row { border-top: 1px solid var(--hairline); margin: 0 18px; padding-left: 0; padding-right: 0; }
+  .row-main { display: flex; align-items: center; gap: 6px; }
+  .row .code { width: 84px; font-size: 18px; font-weight: 400; flex: none; }
+  .row .title { font-size: 15px; }
+  .row .meta { color: var(--text-3); }
+  .row .sev { color: var(--text-2); margin-right: 10px; }
+  .row .more { color: var(--text-3); }
+  .detail { padding: 12px 0 0 84px; color: var(--text-2); font-size: 13px; }
+  .detail[hidden] { display: none; }
+  .detail h4 { margin: 16px 0 8px; font-weight: 500; font-size: 12px; color: var(--text-3); }
+  .ff { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .ff .k { color: var(--text-3); font-size: 12px; }
+  .ff .v { color: var(--text); font-size: 15px; }
+  .detail ol { margin: 0; padding-left: 20px; }
+  .empty { flex: 1; display: grid; place-content: center; text-align: center; }
+  .empty h2 { font-size: 20px; font-weight: 500; margin: 0 0 6px; }
+  .empty p { color: var(--text-2); margin: 0; font-size: 13px; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--hairline); padding-top: 10px; display: flex; align-items: center; gap: 28px; }
+  footer .k { color: var(--text-3); margin-right: 8px; }
+  footer .v { color: var(--text-2); font-size: 13px; }
+  footer .grow { flex: 1; }
+  footer button { color: var(--text-3); padding: 2px 6px; border-radius: 6px; }
+  footer button:hover { background: var(--surface); }
+
+  /* Mid-size screens: let the frame grow instead of crushing content */
+  @media (max-width: 1100px) {
+    .unit { aspect-ratio: auto; }
+    header { grid-template-columns: 1fr; gap: 10px; justify-items: start; }
+    .actions { justify-content: flex-start; flex-wrap: wrap; }
+    .dials, .split { flex-wrap: wrap; grid-template-columns: 1fr; gap: 16px; }
+    .meters { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    main { gap: 20px; padding: 16px 0; }
+    .detail { padding-left: 0; }
+  }
+</style>
 </head>
-<body class="bg-[#08090C] text-[#E8E8E8] antialiased m-0 p-3 select-none font-sans">
+<body>
 
-  <!-- Main Container -->
-  <div class="max-w-5xl mx-auto bg-[#0C0E14] border border-[#222733] rounded-2xl p-4 shadow-2xl overflow-hidden">
-    
-    <!-- Top Status Bar -->
-    <div class="flex items-center justify-between border-b border-[#1E2330] pb-3 mb-3">
-      <div class="flex items-center gap-3">
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-[#3DDC84]/15 border border-[#3DDC84]/40 text-[#3DDC84]">
-          <span class="w-2 h-2 rounded-full bg-[#3DDC84]"></span>
-          OBD-II LIVE
-        </span>
-        <span class="text-xs font-bold tracking-widest text-zinc-300">VW AMAROK 3.0 V6 TDI</span>
-        <span class="text-[10px] px-2 py-0.5 rounded bg-[#161A24] text-zinc-400 border border-[#262D3D]">ECU 0x7E0</span>
-      </div>
-
-      <!-- Mode Selector Tabs -->
-      <div class="flex bg-[#141822] border border-[#262D3D] rounded-lg p-0.5 text-xs font-semibold">
-        <button id="tabTurbo" onclick="setActiveTab('turbo')" class="px-3 py-1 rounded-md bg-amber-500 text-black font-bold transition">TURBO CLUSTER</button>
-        <button id="tabTrans" onclick="setActiveTab('trans')" class="px-3 py-1 rounded-md text-zinc-400 hover:text-white transition">ZF 8HP</button>
-        <button id="tabOffroad" onclick="setActiveTab('offroad')" class="px-3 py-1 rounded-md text-zinc-400 hover:text-white transition">4MOTION</button>
-        <button id="tabDtc" onclick="setActiveTab('dtc')" class="px-3 py-1 rounded-md text-zinc-400 hover:text-white transition">DTCs (3)</button>
-      </div>
-
-      <!-- Action toggles in top bar -->
-      <div class="flex items-center gap-2">
-        <button id="unitBtn" onclick="toggleUnit()" class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#181C26] hover:bg-[#202634] border border-[#2B3345] transition-all text-xs font-semibold cursor-pointer">
-          <span class="text-zinc-400">BOOST:</span>
-          <span id="unitLabel" class="text-amber-400 font-extrabold tracking-wider">BAR</span>
-          <span class="text-zinc-500">/</span>
-        </button>
-      </div>
+<div class="unit" id="unit">
+  <header>
+    <div>
+      <div class="vehicle">Amarok 3.0 V6 TDI</div>
+      <div class="status"><span class="dot" style="background:var(--caution)"></span>Demo data · ECU 7E0</div>
     </div>
 
-    <!-- Active DTC Warning Banner -->
-    <div id="dtcBanner" onclick="setActiveTab('dtc')" class="cursor-pointer mb-3 px-3 py-2 rounded-lg bg-[#2A1215] border border-[#FF4444]/60 flex items-center justify-between text-xs transition hover:bg-[#34161A]">
-      <div class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full bg-[#FF4444]"></span>
-        <span class="text-[#FF8A80] font-semibold">WARNING: 3 ERROR CODES DETECTED: P0299, P0401, P2002</span>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="cluster" aria-selected="true">Cluster</button>
+      <button class="tab" role="tab" data-view="driveline" aria-selected="false">Driveline</button>
+      <button class="tab" role="tab" data-view="offroad" aria-selected="false">Off-road</button>
+    </nav>
+
+    <div class="actions">
+      <div class="seg" role="group" aria-label="Boost unit">
+        <button data-unit="bar" aria-pressed="true">bar</button>
+        <button data-unit="psi" aria-pressed="false">psi</button>
       </div>
-      <span class="text-[#FF5252] font-bold text-[11px] uppercase tracking-wider">VIEW & CLEAR DTCs</span>
+      <button class="link alert" id="faultsLink" data-view="faults">Faults&nbsp;&nbsp;3</button>
+      <button class="link" id="demoLink">Demo</button>
     </div>
+  </header>
 
-    <!-- Throttle Simulator Bar -->
-    <div class="bg-[#12151E] border border-[#202634] rounded-xl px-4 py-2.5 flex items-center justify-between gap-4 mb-4">
-      <div class="flex items-center gap-2 min-w-[130px]">
-        <span class="text-xs font-bold tracking-wide text-zinc-300">THROTTLE:</span>
-        <span id="throttleText" class="font-mono text-amber-400 font-extrabold text-sm">55%</span>
-      </div>
-      <input id="throttleSlider" type="range" min="0" max="100" value="55" oninput="onThrottleChange(this.value)" class="w-full accent-amber-500 bg-[#1D2330] h-2 rounded-lg cursor-pointer" />
-      <div class="flex gap-1.5 shrink-0">
-        <button onclick="setThrottlePreset(5)" class="text-[10px] px-2 py-0.5 rounded bg-[#1C212E] hover:bg-[#283042] text-zinc-300 font-bold border border-[#2B3345]">IDLE</button>
-        <button onclick="setThrottlePreset(40)" class="text-[10px] px-2 py-0.5 rounded bg-[#1C212E] hover:bg-[#283042] text-zinc-300 font-bold border border-[#2B3345]">CRUISE</button>
-        <button onclick="setThrottlePreset(75)" class="text-[10px] px-2 py-0.5 rounded bg-[#1C212E] hover:bg-[#283042] text-zinc-300 font-bold border border-[#2B3345]">BOOST</button>
-        <button onclick="setThrottlePreset(100)" class="text-[10px] px-2 py-0.5 rounded bg-[#2D1B13] hover:bg-[#3D2519] text-amber-400 font-bold border border-amber-600/50">WOT</button>
-      </div>
-    </div>
-
-    <!-- TAB 1: TURBO & CLUSTER -->
-    <div id="tabContentTurbo" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center justify-center py-1">
-        
-        <!-- Dial 1: Tachometer -->
-        <div class="flex flex-col items-center">
-          <div class="text-[11px] font-bold tracking-wider text-zinc-400 mb-1">TACHOMETER</div>
-          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#1E232E] via-[#121419] to-[#0A0B0E] border-2 border-[#2A3142] shadow-[0_0_20px_rgba(0,0,0,0.8)]">
-            <canvas id="tachCanvas" width="210" height="210" class="w-full h-full"></canvas>
-            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
-              <span id="tachValueText" class="font-mono text-2xl font-black text-white tracking-tight">2,725</span>
-              <span class="text-[10px] font-bold text-amber-500 tracking-wider">RPM x1000</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Dial 2: Boost Gauge -->
-        <div class="flex flex-col items-center scale-105">
-          <div class="flex items-center gap-1.5 mb-1 cursor-pointer" onclick="toggleUnit()">
-            <span class="text-xs font-extrabold tracking-wider text-amber-400">BOOST PRESSURE</span>
-            <span id="boostPill" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-extrabold border border-amber-500/40">BAR</span>
-          </div>
-          <div class="relative w-[235px] h-[235px] rounded-full p-2 bg-gradient-to-b from-[#222938] via-[#141720] to-[#08090D] border-2 border-[#384257] shadow-[0_0_28px_rgba(245,166,35,0.15)]">
-            <canvas id="boostCanvas" width="225" height="225" class="w-full h-full"></canvas>
-            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
-              <span id="boostValueText" class="font-mono text-3xl font-black text-amber-400 tracking-tight">+1.41</span>
-              <div class="flex items-center gap-1 text-[11px] font-extrabold text-zinc-300">
-                <span id="boostUnitText">BAR</span>
-                <span id="boostPeakText" class="text-[9px] text-[#FF5252] font-mono font-bold ml-1">PK +1.85</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Dial 3: Speedometer -->
-        <div class="flex flex-col items-center">
-          <div class="text-[11px] font-bold tracking-wider text-zinc-400 mb-1">SPEEDOMETER</div>
-          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#1E232E] via-[#121419] to-[#0A0B0E] border-2 border-[#2A3142] shadow-[0_0_20px_rgba(0,0,0,0.8)]">
-            <canvas id="speedCanvas" width="210" height="210" class="w-full h-full"></canvas>
-            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
-              <span id="speedValueText" class="font-mono text-2xl font-black text-[#00E5FF] tracking-tight">74</span>
-              <span class="text-[10px] font-bold text-zinc-400 tracking-wider">KM/H</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Turbo Telemetry Auxiliary Row -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
-          <div class="flex justify-between items-center text-xs mb-1">
-            <span class="text-zinc-400 font-bold text-[11px]">EGT PRE-TURBO</span>
-            <span id="egtVal" class="font-mono font-bold text-amber-400">568 °C</span>
-          </div>
-          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
-            <div id="egtBar" class="bg-amber-400 h-full rounded-full transition-all" style="width: 58%;"></div>
-          </div>
-          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>200°</span><span>720°</span><span>900°C</span></div>
-        </div>
-
-        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
-          <div class="flex justify-between items-center text-xs mb-1">
-            <span class="text-zinc-400 font-bold text-[11px]">CHARGE AIR</span>
-            <span id="chargeAirVal" class="font-mono font-bold text-[#00E5FF]">45 °C</span>
-          </div>
-          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
-            <div id="chargeAirBar" class="bg-[#00E5FF] h-full rounded-full transition-all" style="width: 50%;"></div>
-          </div>
-          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0°</span><span>55°</span><span>90°C</span></div>
-        </div>
-
-        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
-          <div class="flex justify-between items-center text-xs mb-1">
-            <span class="text-zinc-400 font-bold text-[11px]">VGT VANE POS</span>
-            <span id="vgtVal" class="font-mono font-bold text-[#3DDC84]">65 %</span>
-          </div>
-          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
-            <div id="vgtBar" class="bg-[#3DDC84] h-full rounded-full transition-all" style="width: 65%;"></div>
-          </div>
-          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0%</span><span>50%</span><span>100%</span></div>
-        </div>
-
-        <div class="bg-[#12151E] border border-[#202736] rounded-xl p-3">
-          <div class="flex justify-between items-center text-xs mb-1">
-            <span class="text-zinc-400 font-bold text-[11px]">ENG TORQUE</span>
-            <span id="torqueVal" class="font-mono font-bold text-amber-400">368 Nm</span>
-          </div>
-          <div class="w-full bg-[#1A1F2C] h-2 rounded-full overflow-hidden">
-            <div id="torqueBar" class="bg-amber-400 h-full rounded-full transition-all" style="width: 57%;"></div>
-          </div>
-          <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0</span><span>350</span><span>650 Nm</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 2: ZF 8HP DRIVELINE -->
-    <div id="tabContentTrans" class="hidden space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-        <!-- Boost Dial -->
-        <div class="flex flex-col items-center">
-          <div class="text-xs font-extrabold tracking-wider text-amber-400 mb-1">BOOST PRESSURE</div>
-          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#222938] via-[#141720] to-[#08090D] border-2 border-[#384257]">
-            <canvas id="transBoostCanvas" width="210" height="210" class="w-full h-full"></canvas>
-            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
-              <span id="transBoostValueText" class="font-mono text-2xl font-black text-amber-400">+1.41</span>
-              <span id="transBoostUnitText" class="text-[10px] font-bold text-zinc-300">BAR</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- ZF 8HP Driveline Card -->
-        <div class="bg-[#131620] border border-[#272F40] rounded-xl p-4 space-y-4">
-          <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-zinc-300 tracking-wider">ZF 8HP AUTOMATIC TRANSMISSION</span>
-            <span id="lockupBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#3DDC84]/20 border border-[#3DDC84] text-[#3DDC84]">LOCKUP: LOCKED</span>
-          </div>
-
-          <div class="flex justify-between items-end border-b border-[#202736] pb-3">
-            <div>
-              <span class="text-[10px] text-zinc-500 block uppercase font-bold">Current Gear</span>
-              <span id="gearDisplay" class="font-mono text-5xl font-black text-amber-400">D4</span>
-            </div>
-            <div class="text-right">
-              <span class="text-[10px] text-zinc-500 block uppercase font-bold">Engine Torque Output</span>
-              <span id="transTorqueDisplay" class="font-mono text-3xl font-black text-white">368 <span class="text-xs text-amber-400">Nm</span></span>
-            </div>
-          </div>
-
-          <!-- ATF Temp -->
-          <div>
-            <div class="flex justify-between text-xs mb-1">
-              <span class="text-zinc-400 font-bold">ATF FLUID TEMPERATURE</span>
-              <span id="atfTempDisplay" class="font-mono font-bold text-[#3DDC84]">90 °C</span>
-            </div>
-            <div class="w-full bg-[#1A1F2C] h-2.5 rounded-full overflow-hidden">
-              <div id="atfBar" class="bg-[#3DDC84] h-full rounded-full transition-all" style="width: 50%;"></div>
-            </div>
-            <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>40°C</span><span>Safe (80-95°C)</span><span>Warning (115°C)</span></div>
-          </div>
-
-          <!-- Coolant & Oil Temp -->
-          <div class="grid grid-cols-2 gap-3 pt-1">
-            <div class="bg-[#0D1017] p-2.5 rounded-lg border border-[#1E2533]">
-              <span class="text-[10px] text-zinc-400 block font-bold">COOLANT</span>
-              <span id="transCoolant" class="font-mono font-bold text-sm text-[#3DDC84]">92 °C</span>
-            </div>
-            <div class="bg-[#0D1017] p-2.5 rounded-lg border border-[#1E2533]">
-              <span class="text-[10px] text-zinc-400 block font-bold">OIL TEMP</span>
-              <span id="transOil" class="font-mono font-bold text-sm text-amber-400">100 °C</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 3: 4MOTION OFF-ROAD -->
-    <div id="tabContentOffroad" class="hidden space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-        <!-- Boost on left -->
-        <div class="flex flex-col items-center">
-          <div class="text-xs font-extrabold tracking-wider text-amber-400 mb-1">BOOST PRESSURE</div>
-          <div class="relative w-[220px] h-[220px] rounded-full p-2 bg-gradient-to-b from-[#222938] via-[#141720] to-[#08090D] border-2 border-[#384257]">
-            <canvas id="offroadBoostCanvas" width="210" height="210" class="w-full h-full"></canvas>
-            <div class="absolute bottom-5 left-0 right-0 flex flex-col items-center pointer-events-none">
-              <span id="offroadBoostValueText" class="font-mono text-2xl font-black text-amber-400">+1.41</span>
-              <span id="offroadBoostUnitText" class="text-[10px] font-bold text-zinc-300">BAR</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 4Motion Card -->
-        <div class="bg-[#131620] border border-[#272F40] rounded-xl p-4 space-y-4">
-          <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-zinc-300 tracking-wider">4MOTION OFF-ROAD TELEMETRY</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00E5FF]/20 border border-[#00E5FF] text-[#00E5FF]">ALL-WHEEL DRIVE</span>
-          </div>
-
-          <!-- Inclinometers & Steering -->
-          <div class="grid grid-cols-3 gap-2 text-center border-b border-[#202736] pb-3">
-            <div class="bg-[#0C0F16] p-2.5 rounded-lg border border-[#1A212E]">
-              <span class="text-[10px] text-zinc-400 block font-bold">STEERING</span>
-              <span id="offroadSteering" class="font-mono text-xl font-black text-[#00E5FF]">R 6°</span>
-            </div>
-            <div class="bg-[#0C0F16] p-2.5 rounded-lg border border-[#1A212E]">
-              <span class="text-[10px] text-zinc-400 block font-bold">PITCH (CLIMB)</span>
-              <span id="offroadPitch" class="font-mono text-xl font-black text-amber-400">+8°</span>
-            </div>
-            <div class="bg-[#0C0F16] p-2.5 rounded-lg border border-[#1A212E]">
-              <span class="text-[10px] text-zinc-400 block font-bold">ROLL (TILT)</span>
-              <span id="offroadRoll" class="font-mono text-xl font-black text-zinc-200">6°</span>
-            </div>
-          </div>
-
-          <!-- Wheel Slip -->
-          <div>
-            <div class="flex justify-between text-xs mb-1">
-              <span class="text-zinc-400 font-bold">TRACTION WHEEL SLIP</span>
-              <span id="offroadSlipVal" class="font-mono font-bold text-[#3DDC84]">4.7 %</span>
-            </div>
-            <div class="w-full bg-[#1A1F2C] h-2.5 rounded-full overflow-hidden">
-              <div id="offroadSlipBar" class="bg-[#3DDC84] h-full rounded-full transition-all" style="width: 16%;"></div>
-            </div>
-            <div class="flex justify-between text-[9px] text-zinc-500 mt-1"><span>0% (Full Grip)</span><span>15% (Slip Warn)</span><span>30% (Loose Sand)</span></div>
-          </div>
-
-          <!-- Torque & Battery -->
-          <div class="grid grid-cols-2 gap-3 pt-1">
-            <div class="bg-[#0D1017] p-2 rounded-lg border border-[#1E2533]">
-              <span class="text-[10px] text-zinc-400 block font-bold">DELIVERED TORQUE</span>
-              <span id="offroadTorque" class="font-mono font-bold text-sm text-white">368 Nm</span>
-            </div>
-            <div class="bg-[#0D1017] p-2 rounded-lg border border-[#1E2533]">
-              <span class="text-[10px] text-zinc-400 block font-bold">BATTERY VOLTAGE</span>
-              <span id="offroadBattery" class="font-mono font-bold text-sm text-[#3DDC84]">14.1 V</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- TAB 4: DTC DIAGNOSTIC CODES -->
-    <div id="tabContentDtc" class="hidden space-y-4">
-      <div class="flex items-center justify-between border-b border-[#212735] pb-3">
-        <div>
-          <h2 class="text-base font-extrabold text-white tracking-wide">ECU DIAGNOSTIC TROUBLE CODES (DTC)</h2>
-          <p class="text-xs text-zinc-400">Target ECU: 0x7E0 (Bosch EDC17 / MD1 Amarok 3.0 V6 TDI)</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick="scanDtc()" id="scanBtn" class="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-black transition cursor-pointer">
-            SCAN ECU
-          </button>
-          <button onclick="clearDtc()" id="clearBtn" class="px-3.5 py-1.5 rounded-lg bg-[#301618] hover:bg-[#421D20] text-[#FF5252] border border-[#FF5252]/40 text-xs font-bold transition cursor-pointer">
-            CLEAR DTCs (MODE 04)
-          </button>
-        </div>
-      </div>
-
-      <!-- Scan Progress Bar -->
-      <div id="scanProgressBar" class="hidden w-full bg-[#1A1F2C] h-1.5 rounded-full overflow-hidden">
-        <div id="scanProgressFill" class="bg-amber-400 h-full w-0 transition-all duration-150"></div>
-      </div>
-
-      <!-- DTC List -->
-      <div id="dtcList" class="space-y-3">
-        <div class="p-3.5 rounded-xl bg-[#131620] border border-[#272F40]">
-          <div class="flex justify-between items-start">
-            <div class="flex items-center gap-2.5">
-              <span class="px-2.5 py-1 rounded bg-[#FF4444]/20 border border-[#FF4444] text-[#FF5252] font-mono font-black text-sm">P0299</span>
-              <div>
-                <h3 class="text-sm font-bold text-white">Turbocharger Underboost Condition</h3>
-                <p class="text-xs text-zinc-400">Boost & Induction System • Stored Fault</p>
-              </div>
-            </div>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FF4444]/15 text-[#FF5252]">CONFIRMED</span>
-          </div>
-          <p class="text-xs text-zinc-300 mt-2">Manifold absolute pressure is below requested boost target by ECM under high load.</p>
-        </div>
-
-        <div class="p-3.5 rounded-xl bg-[#131620] border border-[#272F40]">
-          <div class="flex justify-between items-start">
-            <div class="flex items-center gap-2.5">
-              <span class="px-2.5 py-1 rounded bg-[#FF4444]/20 border border-[#FF4444] text-[#FF5252] font-mono font-black text-sm">P0401</span>
-              <div>
-                <h3 class="text-sm font-bold text-white">EGR Flow Insufficient Detected</h3>
-                <p class="text-xs text-zinc-400">Exhaust Gas Recirculation • Stored Fault</p>
-              </div>
-            </div>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#FF4444]/15 text-[#FF5252]">CONFIRMED</span>
-          </div>
-        </div>
-
-        <div class="p-3.5 rounded-xl bg-[#131620] border border-[#272F40]">
-          <div class="flex justify-between items-start">
-            <div class="flex items-center gap-2.5">
-              <span class="px-2.5 py-1 rounded bg-amber-500/20 border border-amber-500 text-amber-400 font-mono font-black text-sm">P2002</span>
-              <div>
-                <h3 class="text-sm font-bold text-white">DPF Efficiency Below Threshold Bank 1</h3>
-                <p class="text-xs text-zinc-400">Exhaust Aftertreatment • Pending Verification</p>
-              </div>
-            </div>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400">PENDING</span>
-          </div>
-        </div>
-      </div>
-
-      <div id="noCodesBanner" class="hidden p-8 text-center rounded-xl bg-[#11141C] border border-[#202736]">
-        <h3 class="text-base font-bold text-[#3DDC84]">ALL SYSTEMS NORMAL</h3>
-        <p class="text-xs text-zinc-400">No diagnostic trouble codes found in ECU memory.</p>
-      </div>
-    </div>
-
-    <!-- Bottom Telemetry Bar -->
-    <div class="flex items-center justify-between border-t border-[#1C212E] pt-3 mt-4 text-xs">
-      <div class="flex items-center gap-4 text-zinc-400">
-        <span>FUEL CONSUMPTION: <b class="font-mono text-zinc-200" id="fuelText">2.8 L/h</b></span>
-        <span>PEAK BOOST: <b class="font-mono text-amber-400" id="peakFooterText">1.85 BAR</b></span>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="text-zinc-500 text-[11px]">POLLING RATE:</span>
-        <span class="font-mono font-bold text-[#3DDC84]">10.4 sps</span>
-      </div>
-    </div>
-
+  <div class="notice" id="notice" data-view="faults">
+    <span class="dot" style="background:var(--alert);width:7px;height:7px"></span>
+    <span id="noticeText">3 fault codes stored</span>
+    <span class="codes num" id="noticeCodes">P0299&nbsp;&nbsp;P0401&nbsp;&nbsp;P2002</span>
+    <span class="go">Review</span>
   </div>
 
-  <script>
-    let currentUnit = 'BAR'; // 'BAR' or 'PSI'
-    let throttleVal = 55; // 0 - 100
-    let peakKPa = 245;
-    let activeTabId = 'turbo';
+  <div class="demo" id="demo">
+    <label for="throttle">Throttle</label>
+    <output id="throttleOut" class="num">55%</output>
+    <input id="throttle" type="range" min="0" max="100" value="55">
+    <div class="seg" id="presets">
+      <button data-t="5">Idle</button>
+      <button data-t="40">Cruise</button>
+      <button data-t="75">Boost</button>
+      <button data-t="100">Full</button>
+    </div>
+  </div>
 
-    function setActiveTab(tab) {
-      activeTabId = tab;
-      const tabs = ['turbo', 'trans', 'offroad', 'dtc'];
-      tabs.forEach(t => {
-        const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
-        const content = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
-        if (t === tab) {
-          content.classList.remove('hidden');
-          btn.className = "px-3 py-1 rounded-md bg-amber-500 text-black font-bold transition";
-        } else {
-          content.classList.add('hidden');
-          btn.className = "px-3 py-1 rounded-md text-zinc-400 hover:text-white transition";
-        }
-      });
-      updateCluster();
+  <main>
+    <!-- Cluster -->
+    <section class="view" data-view="cluster">
+      <div class="dials">
+        <div class="dial" id="tach"></div>
+        <div class="dial" id="boost"></div>
+        <div class="dial" id="speed"></div>
+      </div>
+      <div class="subrow">
+        <div class="col">
+          <div class="meter" id="m-egt"></div>
+          <div class="meter" id="m-cac"></div>
+        </div>
+        <div class="subdials">
+          <div class="dial compact vgt" id="vgt"><canvas></canvas><div class="vgt-eye num"><span id="vgtVal">65</span><small>%</small></div><div class="name">VGT vane</div></div>
+          <div class="dial compact" id="coolant"></div>
+          <div class="dial compact" id="oil"></div>
+        </div>
+        <div class="col">
+          <div class="meter" id="m-tq"></div>
+          <div class="meter" id="m-batt1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Driveline -->
+    <section class="view" data-view="driveline" hidden>
+      <div class="split">
+        <div class="dial" id="boost2"></div>
+        <div class="stack">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="title">ZF 8HP transmission</span>
+              <span class="status" id="lockup"><span class="dot" style="background:var(--teal)"></span>Converter locked</span>
+            </div>
+            <div class="stats">
+              <div class="stat"><div class="k">Gear</div><div class="v large num" id="gear" style="color:var(--accent)">D4</div></div>
+              <div class="stat" style="flex:none"><div class="k">Engine torque</div><div><span class="v large num" id="tq2">368</span><span class="u">Nm</span></div></div>
+            </div>
+            <div class="meter" id="m-atf"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="title">Engine temperatures</span></div>
+            <div class="pair">
+              <div class="meter" id="m-cool"></div>
+              <div class="meter" id="m-oil"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Off-road -->
+    <section class="view" data-view="offroad" hidden>
+      <div class="split">
+        <div class="dial" id="boost3"></div>
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title">4Motion</span>
+            <span class="status" id="traction"><span class="dot"></span>Full grip</span>
+          </div>
+          <div class="angles">
+            <div class="angle"><div class="k">Steering</div><canvas id="cv-steer"></canvas><span class="v num" id="steer">0°</span><span class="u" id="steerDir">centre</span></div>
+            <div class="angle"><div class="k">Pitch</div><canvas id="cv-pitch"></canvas><span class="v num" id="pitch">0°</span><span class="u" id="pitchDir">level</span></div>
+            <div class="angle"><div class="k">Roll</div><canvas id="cv-roll"></canvas><span class="v num" id="roll">0°</span><span class="u" id="rollDir">level</span></div>
+          </div>
+          <div class="drivetrain">
+            <div class="chassis">
+              <div class="labels left num"><span id="s-fl"></span><span id="s-rl"></span></div>
+              <div class="mid"><div>Front</div><canvas id="cv-chassis" style="width:92px;height:132px;display:block"></canvas></div>
+              <div class="labels num"><span id="s-fr"></span><span id="s-rr"></span></div>
+            </div>
+            <div class="dt-info">
+              <div class="sline"><span class="k">Centre diff</span><span class="status" id="centreDiff"></span></div>
+              <div class="sline"><span class="k">Rear diff lock</span><span class="status" id="rearDiff"></span></div>
+              <div>
+                <div class="split-head"><span>Front</span><span>Rear</span></div>
+                <div class="splitbar"><i id="splitF" style="background:var(--text-2)"></i><i id="splitR" style="background:var(--teal)"></i></div>
+              </div>
+              <div class="meter" id="m-slip"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Faults -->
+    <section class="view" data-view="faults" hidden style="justify-content:flex-start;padding:16px 0 12px">
+      <div class="faults-head">
+        <div class="grow">
+          <h1>Fault codes</h1>
+          <div class="sub">Engine ECU 7E0 · Bosch EDC17</div>
+        </div>
+        <button class="btn primary" id="scanBtn">Scan</button>
+        <button class="btn destructive" id="clearBtn">Clear codes</button>
+      </div>
+      <div class="faults-bar">
+        <div class="seg" id="filters">
+          <button data-f="all" aria-pressed="true">All</button>
+          <button data-f="stored" aria-pressed="false">Stored</button>
+          <button data-f="pending" aria-pressed="false">Pending</button>
+        </div>
+        <span class="grow"></span>
+        <span id="milText" style="color:var(--alert)">Check-engine light on · 3 codes</span>
+      </div>
+      <div class="progress"><i id="scanFill"></i></div>
+      <div class="list" id="list"></div>
+      <div class="empty" id="empty" hidden>
+        <h2 id="emptyTitle">No fault codes</h2>
+        <p id="emptyText">The engine ECU reports nothing stored or pending.</p>
+      </div>
+      <div class="confirm panel" id="confirm" hidden style="margin-top:12px;display:flex;align-items:center;gap:12px;background:var(--surface-high)">
+        <div style="flex:1">
+          <div style="font-size:15px">Clear all fault codes?</div>
+          <div style="color:var(--text-2);font-size:13px">Resets stored codes and freeze frames and turns off the check-engine light.</div>
+        </div>
+        <button class="btn" id="cancelClear">Cancel</button>
+        <button class="btn destructive" id="confirmClear" style="background:var(--surface)">Clear codes</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span><span class="k">Fuel</span><span class="v num" id="fuel">8.8 L/h</span></span>
+    <span><span class="k">Peak boost</span><span class="v num" id="peak">+0.86 bar</span></span>
+    <button id="resetPeak">Reset peak</button>
+    <span class="grow"></span>
+    <span><span class="k">Polling</span><span class="v num">10.4 Hz</span></span>
+  </footer>
+</div>
+<p class="caption">Interactive preview of the Android cluster (1280×720 head unit). Use <b>Demo</b> to drive the simulated throttle. Data is simulated.</p>
+
+<script>
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const C = {
+  text: css('--text'), text2: css('--text-2'), text3: css('--text-3'), hair: css('--hairline'),
+  surfaceHigh: css('--surface-high'), accent: css('--accent'), teal: css('--teal'), caution: css('--caution'),
+  alert: css('--alert'), cool: css('--cool'),
+};
+const withAlpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
+
+const state = { unit: 'bar', throttle: 0.55, view: 'cluster', peakKPa: null, filter: 'all', expanded: null };
+
+/* ── Faults ─────────────────────────────────────────────────────────────── */
+const SAMPLE = [
+  { code: 'P0299', title: 'Turbocharger underboost', system: 'Boost & induction', sev: 'stored',
+    desc: 'Manifold pressure stayed well below the boost target requested by the ECM.',
+    ff: [['Engine speed','2,840 rpm'],['Target boost','2.10 bar'],['Actual boost','1.42 bar'],['Engine load','78 %'],['Coolant','88 °C']],
+    causes: ['Split or loose intercooler boost hose','Faulty N75 boost control solenoid or vacuum line leak','Sticking VTG vanes or actuator','EGR valve stuck partially open'] },
+  { code: 'P0401', title: 'EGR flow insufficient', system: 'Exhaust gas recirculation', sev: 'stored',
+    desc: 'Measured EGR flow across the differential pressure sensor is below specification.',
+    ff: [['Engine speed','1,750 rpm'],['Vehicle speed','68 km/h'],['MAF actual','480 mg/str'],['EGR duty','65 %']],
+    causes: ['Carbon build-up in the EGR valve or cooler','EGR cooler bypass flap stuck or leaking','Faulty MAF or EGR differential pressure sensor'] },
+  { code: 'P2002', title: 'DPF efficiency below threshold', system: 'Exhaust aftertreatment', sev: 'pending',
+    desc: 'DPF differential pressure suggests poor soot trapping or ash saturation.',
+    ff: [['Soot mass','24.5 g'],['Diff. pressure','14 mbar'],['Exhaust temp','310 °C']],
+    causes: ['Regenerations interrupted by frequent short trips','Pinched or cracked DPF pressure sensor hoses','Ash load near the DPF service limit'] },
+];
+let faults = [...SAMPLE];
+
+/* ── Simulation (mirrors SimulatedVehicle.at in DashboardScreen.kt) ─────── */
+function sim(t) {
+  const speed = t * 135;
+  const ups = [15, 32, 50, 70, 92, 112, 130];
+  const gi = ups.findIndex(u => speed < u);
+  const s = t * 18;
+  const wheels = { fl: s * 0.45, fr: s * 0.6, rl: s * 0.95, rr: s * 1.15 };
+  const rearBias = (wheels.rl + wheels.rr) / 2 - (wheels.fl + wheels.fr) / 2;
+  return {
+    wheels, maxSlip: Math.max(wheels.fl, wheels.fr, wheels.rl, wheels.rr),
+    rearLocked: t > 0.8, rearTorque: Math.max(35, Math.min(65, 60 - rearBias * 1.5)), roll: t * 14 - 3,
+    rpm: 800 + t * 3500, boostKPa: 95 + t * 165, speed,
+    coolant: 88 + t * 8, oil: 92 + t * 14, battery: 14.2 - t * 0.3, fuel: 1.2 + t * 14.5,
+    egt: 310 + t * 470, cac: 30 + t * 28, vgt: 35 + t * 55, torque: 110 + t * 470,
+    gear: 'D' + (gi === -1 ? 8 : gi + 1), slip: t > 0.9, atf: 82 + t * 14,
+    steer: t * 30 - 15, pitch: t * 18 - 4, wheelSlip: t * 8.5,
+  };
+}
+const boostFrom = (kpa, unit) => { const bar = (kpa - 100) / 100; return unit === 'bar' ? bar : bar * 14.5038; };
+const fmtBoost = (v, unit) => (v >= 0 ? '+' : '') + v.toFixed(unit === 'bar' ? 2 : 1);
+
+/* ── Dial ───────────────────────────────────────────────────────────────── */
+function makeDial(el, size) {
+  const dpr = window.devicePixelRatio || 1;
+  const compact = el.classList.contains('compact');
+  el.innerHTML = `<canvas></canvas><div class="readout"><div class="value num"></div><div class="label"></div></div>` +
+    (compact ? `<div class="name"></div>` : '');
+  const cv = el.querySelector('canvas');
+  cv.width = size * dpr; cv.height = size * dpr;
+  cv.style.width = cv.style.height = size + 'px';
+  el.querySelector('.value').style.fontSize = Math.round(size * (compact ? 0.22 : 0.17)) + 'px';
+  return { el, cv, size, dpr, compact };
+}
+
+function drawDial(d, o) {
+  const ctx = d.cv.getContext('2d');
+  const { size, dpr } = d;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, size, size);
+  const cx = size / 2, cy = size / 2, R = size / 2, r = R * 0.92;
+  const start = 135 * Math.PI / 180, sweep = 270 * Math.PI / 180;
+  const v = Math.max(o.min, Math.min(o.max, o.value));
+  const ang = x => start + ((x - o.min) / (o.max - o.min)) * sweep;
+  const arc = (color, a, b, w, cap = 'butt') => {
+    if (b <= a) return;
+    ctx.beginPath(); ctx.arc(cx, cy, r, ang(a), ang(b));
+    ctx.lineWidth = w; ctx.strokeStyle = color; ctx.lineCap = cap; ctx.stroke();
+  };
+  const radial = (a, r0, r1, color, w, cap = 'butt') => {
+    const c = Math.cos(a), s = Math.sin(a);
+    ctx.beginPath(); ctx.moveTo(cx + r0 * c, cy + r0 * s); ctx.lineTo(cx + r1 * c, cy + r1 * s);
+    ctx.lineWidth = w; ctx.strokeStyle = color; ctx.lineCap = cap; ctx.stroke();
+  };
+
+  const compact = d.compact;
+  const stateColor =
+    o.redline != null && v >= o.redline ? C.alert :
+    o.caution != null && v >= o.caution ? C.caution :
+    o.zero != null && v < o.zero ? C.cool :
+    o.coolBelow != null && v < o.coolBelow ? C.cool : (o.accent ?? C.accent);
+
+  const track = R * (compact ? 0.04 : 0.025);
+  arc(C.hair, o.min, o.max, track);
+  if (o.zero != null) arc(withAlpha(C.cool, 0.35), o.min, o.zero, track);
+  if (o.coolBelow != null) arc(withAlpha(C.cool, 0.35), o.min, o.coolBelow, track);
+  if (o.caution != null) arc(withAlpha(C.caution, 0.45), o.caution, o.redline ?? o.max, track);
+  if (o.redline != null) arc(withAlpha(C.alert, 0.8), o.redline, o.max, track);
+
+  const origin = o.zero ?? o.min;
+  const valueW = R * (compact ? 0.07 : 0.045);
+  v >= origin ? arc(stateColor, origin, v, valueW, 'round') : arc(stateColor, v, origin, valueW, 'round');
+
+  const n = Math.round((o.max - o.min) / o.step);
+  ctx.font = `500 ${Math.round(R * 0.085)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= n; i++) {
+    const tv = o.min + i * o.step;
+    const red = o.redline != null && tv >= o.redline;
+    radial(ang(tv), r - R * 0.10, r - R * 0.045, red ? C.alert : C.text2, R * (compact ? 0.02 : 0.014));
+    const lbl = compact ? '' : o.tick(tv);
+    if (lbl) {
+      ctx.fillStyle = red ? C.alert : C.text3;
+      const a = ang(tv), lr = r - R * 0.20;
+      ctx.fillText(lbl, cx + lr * Math.cos(a), cy + lr * Math.sin(a));
     }
-
-    function toggleUnit() {
-      currentUnit = currentUnit === 'BAR' ? 'PSI' : 'BAR';
-      document.getElementById('unitLabel').innerText = currentUnit;
-      document.getElementById('boostPill').innerText = currentUnit;
-      document.getElementById('boostUnitText').innerText = currentUnit;
-      document.getElementById('transBoostUnitText').innerText = currentUnit;
-      document.getElementById('offroadBoostUnitText').innerText = currentUnit;
-      updateCluster();
+    if (i < n && !compact) for (let m = 1; m <= o.minor; m++) {
+      radial(ang(tv + m * o.step / (o.minor + 1)), r - R * 0.07, r - R * 0.045, C.text3, R * 0.008);
     }
+  }
+  if (o.peak != null && o.peak >= o.min && o.peak <= o.max) {
+    radial(ang(o.peak), r + R * 0.025, r + R * 0.075, C.text, R * 0.016);
+  }
+  if (!compact) {
+    radial(ang(v), -R * 0.08, r - R * 0.06, stateColor, R * 0.022, 'round');
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.07, 0, Math.PI * 2); ctx.fillStyle = C.surfaceHigh; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.025, 0, Math.PI * 2); ctx.fillStyle = stateColor; ctx.fill();
+  }
 
-    function onThrottleChange(val) {
-      throttleVal = parseFloat(val);
-      document.getElementById('throttleText').innerText = Math.round(throttleVal) + '%';
-      updateCluster();
+  const valueEl = d.el.querySelector('.value');
+  valueEl.textContent = (o.text ?? (x => x.toFixed(0)))(v);
+  valueEl.classList.toggle('alert', stateColor === C.alert);
+  d.el.querySelector('.label').textContent = compact ? o.unit : `${o.label} · ${o.unit}`;
+  if (compact) d.el.querySelector('.name').textContent = o.label;
+}
+
+const boostOpts = (kpa, peakKpa, unit) => {
+  const bar = unit === 'bar';
+  return {
+    value: boostFrom(kpa, unit), peak: boostFrom(peakKpa, unit),
+    min: bar ? -1 : -15, max: bar ? 2.5 : 35, step: bar ? 0.5 : 5, minor: 4,
+    caution: bar ? 1.8 : 26, redline: bar ? 2.2 : 32, zero: 0,
+    label: 'Boost', unit, text: x => fmtBoost(x, unit),
+    tick: x => bar ? String(+x.toFixed(1)) : (Math.round(x) % 10 === 0 ? x.toFixed(0) : ''),
+  };
+};
+
+/* ── Canvas helpers ─────────────────────────────────────────────────────── */
+function prep(cv, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  w = w ?? cv.clientWidth; h = h ?? cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  return { ctx, w, h };
+}
+const rad = d => d * Math.PI / 180;
+
+/* ── VGT nozzle ring (mirrors VgtVaneGauge in TurboComponents.kt) ──────── */
+function drawVgt(pct) {
+  const el = document.getElementById('vgt');
+  const size = el.offsetWidth || 124;
+  const { ctx } = prep(el.querySelector('canvas'), size, size - 14);
+  const r = (size - 14) / 2, cx = size / 2, cy = r, f = Math.max(0, Math.min(1, pct / 100));
+  const ring = r * 0.94;
+  ctx.lineWidth = r * 0.05;
+  ctx.strokeStyle = C.hair; ctx.beginPath(); ctx.arc(cx, cy, ring, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = C.teal; ctx.beginPath(); ctx.arc(cx, cy, ring, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
+  // turbine wheel
+  ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(cx, cy, r * 0.46, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = C.text3; ctx.lineWidth = r * 0.03;
+  for (let i = 0; i < 12; i++) {
+    const a = rad(i * 30), b = rad(i * 30 + 22);
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.34 * Math.cos(a), cy + r * 0.34 * Math.sin(a));
+    ctx.lineTo(cx + r * 0.45 * Math.cos(b), cy + r * 0.45 * Math.sin(b)); ctx.stroke();
+  }
+  ctx.fillStyle = css('--bg'); ctx.beginPath(); ctx.arc(cx, cy, r * 0.33, 0, Math.PI * 2); ctx.fill();
+  // guide vanes: tangential when closed, pivot ~58° towards radial when open
+  const pivotR = r * 0.66, len = r * 0.30;
+  for (let i = 0; i < 11; i++) {
+    const th = i * 360 / 11;
+    const px = cx + pivotR * Math.cos(rad(th)), py = cy + pivotR * Math.sin(rad(th));
+    const va = rad(th + 90 + 12 - f * 58), dx = Math.cos(va), dy = Math.sin(va);
+    ctx.strokeStyle = C.teal; ctx.lineWidth = r * 0.075;
+    ctx.beginPath(); ctx.moveTo(px - dx * len * 0.45, py - dy * len * 0.45); ctx.lineTo(px + dx * len * 0.55, py + dy * len * 0.55); ctx.stroke();
+    ctx.fillStyle = css('--surface'); ctx.beginPath(); ctx.arc(px, py, r * 0.022, 0, Math.PI * 2); ctx.fill();
+  }
+  document.getElementById('vgtVal').textContent = Math.round(pct);
+}
+
+/* ── 4Motion drawings (mirror OffRoadComponents.kt) ────────────────────── */
+const slipColor = p => p >= 15 ? C.alert : p >= 6 ? C.caution : C.teal;
+const angleColor = (d, caution, alert) => Math.abs(d) >= alert ? C.alert : Math.abs(d) >= caution ? C.caution : C.teal;
+
+function levelLine(ctx, w, y) {
+  ctx.save(); ctx.setLineDash([4, 4]); ctx.lineCap = 'butt'; ctx.strokeStyle = C.text3; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); ctx.restore();
+}
+function shape(ctx, pts, color, close = true) {
+  ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); if (close) ctx.closePath();
+  ctx.fillStyle = withAlpha(color, 0.16); ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+function drawSteering(deg) {
+  const { ctx, w, h } = prep(document.getElementById('cv-steer'));
+  const r = Math.min(w, h) / 2 * 0.86, cx = w / 2, cy = h / 2;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rad(deg));
+  ctx.strokeStyle = C.text2;
+  ctx.lineWidth = r * 0.13; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = r * 0.11; ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, 0); ctx.lineTo(0, r); ctx.stroke();
+  ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.lineWidth = r * 0.07; ctx.stroke();
+  ctx.strokeStyle = C.teal; ctx.lineWidth = r * 0.16; ctx.beginPath(); ctx.moveTo(0, -r - r * 0.09); ctx.lineTo(0, -r + r * 0.09); ctx.stroke();
+  ctx.restore();
+}
+
+// Side view of a double-cab pickup, front to the right. +pitch = nose up.
+function drawPitch(deg, color) {
+  const { ctx, w, h } = prep(document.getElementById('cv-pitch'));
+  const g = h * 0.88, L = Math.min(w * 0.86, h * 2.0), left = w / 2 - L / 2;
+  const P = (x, y) => [left + x * L, g - y * L];
+  levelLine(ctx, w, g);
+  ctx.save(); ctx.translate(w / 2, g); ctx.rotate(rad(-deg)); ctx.translate(-w / 2, -g);
+  const archR = 0.11 * L, wheelR = 0.085 * L;
+  const [fx, ay] = P(0.79, 0.10), [rx] = P(0.22, 0.10);
+  ctx.beginPath();
+  [[0.03, 0.10], [0.02, 0.24], [0.40, 0.245], [0.43, 0.36], [0.66, 0.37], [0.77, 0.255], [0.95, 0.225], [0.99, 0.17], [0.98, 0.10], [0.90, 0.10]]
+    .forEach(([x, y], i) => { const [X, Y] = P(x, y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+  ctx.arc(fx, ay, archR, 0, Math.PI, true);
+  ctx.lineTo(...P(0.33, 0.10));
+  ctx.arc(rx, ay, archR, 0, Math.PI, true);
+  ctx.closePath();
+  ctx.fillStyle = withAlpha(color, 0.16); ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); [[0.455, 0.34], [0.645, 0.35], [0.735, 0.26], [0.455, 0.26]].forEach(([x, y], i) => { const [X, Y] = P(x, y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+  ctx.closePath(); ctx.fillStyle = withAlpha(css('--bg'), 0.7); ctx.fill();
+  ctx.strokeStyle = withAlpha(color, 0.5); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...P(0.55, 0.35)); ctx.lineTo(...P(0.55, 0.12)); ctx.stroke();
+  [P(0.22, 0.09), P(0.79, 0.09)].forEach(([X, Y]) => {
+    ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(X, Y, wheelR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = withAlpha(color, 0.5); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(X, Y, wheelR * 0.45, 0, Math.PI * 2); ctx.stroke();
+  });
+  ctx.restore();
+}
+
+// Rear view. +roll = right side down.
+function drawRoll(deg, color) {
+  const { ctx, w, h } = prep(document.getElementById('cv-roll'));
+  const g = h * 0.88, W = Math.min(w * 0.62, h * 1.12), cx = w / 2;
+  const P = (x, y) => [cx + x * W, g - y * W];
+  const box = (x0, y0, x1, y1, fill, stroke) => {
+    const [X0, Y1] = P(x0, y1), [X1, Y0] = P(x1, y0);
+    ctx.beginPath(); ctx.roundRect(X0, Y1, X1 - X0, Y0 - Y1, 2);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+  };
+  levelLine(ctx, w, g);
+  ctx.save(); ctx.translate(cx, g); ctx.rotate(rad(deg)); ctx.translate(-cx, -g);
+  box(-0.49, 0, -0.32, 0.25, C.surfaceHigh, color);
+  box(0.32, 0, 0.49, 0.25, C.surfaceHigh, color);
+  shape(ctx, [[-0.46, 0.15], [-0.47, 0.42], [-0.36, 0.43], [-0.32, 0.70], [0.32, 0.70], [0.36, 0.43], [0.47, 0.42], [0.46, 0.15]].map(([x, y]) => P(x, y)), color);
+  box(-0.24, 0.50, 0.24, 0.64, withAlpha(css('--bg'), 0.7));
+  ctx.strokeStyle = withAlpha(color, 0.5); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...P(-0.40, 0.36)); ctx.lineTo(...P(0.40, 0.36)); ctx.stroke();
+  box(-0.44, 0.10, 0.44, 0.16, withAlpha(color, 0.5));
+  box(-0.45, 0.25, -0.39, 0.39, withAlpha(C.alert, 0.85));
+  box(0.39, 0.25, 0.45, 0.39, withAlpha(C.alert, 0.85));
+  box(-0.44, 0.50, -0.34, 0.56, color);
+  box(0.34, 0.50, 0.44, 0.56, color);
+  ctx.restore();
+}
+
+// Top-down drivetrain, front up. Wheels coloured by slip.
+function drawChassis(wheels, rearLocked) {
+  const { ctx, w, h } = prep(document.getElementById('cv-chassis'), 92, 132);
+  const ww = w * 0.20, wh = h * 0.22, fy = h * 0.18, ry = h * 0.82, lx = ww / 2, rx = w - ww / 2, dr = w * 0.09;
+  ctx.strokeStyle = C.text3; ctx.lineWidth = 2.5; ctx.lineCap = 'butt';
+  ctx.beginPath(); ctx.moveTo(lx, fy); ctx.lineTo(rx, fy); ctx.moveTo(lx, ry); ctx.lineTo(rx, ry); ctx.moveTo(w / 2, fy); ctx.lineTo(w / 2, ry); ctx.stroke();
+  const ringDiff = (y, rr, col) => {
+    ctx.fillStyle = css('--surface'); ctx.beginPath(); ctx.arc(w / 2, y, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+  };
+  ringDiff(fy, dr, C.text2);
+  ringDiff(h / 2, dr * 1.15, C.teal);
+  if (rearLocked) { ctx.fillStyle = C.accent; ctx.beginPath(); ctx.roundRect(w / 2 - dr, ry - dr, dr * 2, dr * 2, dr * 0.4); ctx.fill(); }
+  else ringDiff(ry, dr, C.text2);
+  [[lx, fy, wheels.fl], [rx, fy, wheels.fr], [lx, ry, wheels.rl], [rx, ry, wheels.rr]].forEach(([x, y, s]) => {
+    ctx.fillStyle = slipColor(s); ctx.beginPath(); ctx.roundRect(x - ww / 2, y - wh / 2, ww, wh, ww * 0.3); ctx.fill();
+  });
+}
+
+const statusHtml = (text, color) => `<span class="dot" style="background:${color}"></span>${text}`;
+
+/* ── Linear meter ───────────────────────────────────────────────────────── */
+function meter(id, label, value, unit, min, max, o = {}) {
+  const el = document.getElementById(id);
+  if (!el.firstChild) el.innerHTML = `<div class="meter-head"><span class="name"></span><span class="v num"></span><span class="u"></span></div><div class="bar"><i></i></div>`;
+  const color =
+    o.alert != null && value >= o.alert ? C.alert :
+    o.caution != null && value >= o.caution ? C.caution :
+    o.cool != null && value < o.cool ? C.cool : null;
+  el.querySelector('.name').textContent = label;
+  const v = el.querySelector('.v');
+  v.textContent = value.toFixed(o.digits ?? 0);
+  v.style.color = color ?? C.text;
+  el.querySelector('.u').textContent = unit;
+  const fill = el.querySelector('.bar i');
+  fill.style.width = (Math.max(0, Math.min(1, (value - min) / (max - min))) * 100) + '%';
+  fill.style.background = color ?? C.teal;
+}
+
+/* ── Render ─────────────────────────────────────────────────────────────── */
+let dials = {};
+function buildDials() {
+  const small = window.innerWidth < 1100;
+  dials = {
+    tach: makeDial(document.getElementById('tach'), small ? 210 : 224),
+    boost: makeDial(document.getElementById('boost'), small ? 240 : 256),
+    speed: makeDial(document.getElementById('speed'), small ? 210 : 224),
+    coolant: makeDial(document.getElementById('coolant'), small ? 112 : 124),
+    oil: makeDial(document.getElementById('oil'), small ? 112 : 124),
+    boost2: makeDial(document.getElementById('boost2'), small ? 260 : 290),
+    boost3: makeDial(document.getElementById('boost3'), small ? 260 : 290),
+  };
+}
+
+function render() {
+  const car = sim(state.throttle);
+  if (state.peakKPa == null || car.boostKPa > state.peakKPa) state.peakKPa = car.boostKPa;
+  const u = state.unit;
+
+  drawDial(dials.tach, {
+    value: car.rpm, min: 0, max: 6000, step: 1000, minor: 3, caution: 4000, redline: 4500,
+    label: 'Engine', unit: 'rpm', text: x => (Math.round(x / 10) * 10).toLocaleString('en-US'), tick: x => String(x / 1000),
+  });
+  ['boost', 'boost2', 'boost3'].forEach(k => drawDial(dials[k], boostOpts(car.boostKPa, state.peakKPa, u)));
+  drawDial(dials.speed, {
+    value: car.speed, min: 0, max: 220, step: 20, minor: 1,
+    label: 'Speed', unit: 'km/h', accent: C.teal, text: x => x.toFixed(0), tick: x => Math.round(x) % 40 === 0 ? x.toFixed(0) : '',
+  });
+
+  // Sub-dials (mirror VgtVaneGauge / CoolantGauge / OilTempGauge)
+  drawVgt(car.vgt);
+  drawDial(dials.coolant, { value: car.coolant, min: 40, max: 130, step: 15, coolBelow: 80, caution: 105, redline: 115, label: 'Coolant', unit: '°C', accent: C.teal });
+  drawDial(dials.oil, { value: car.oil, min: 40, max: 150, step: 22, coolBelow: 85, caution: 125, redline: 138, label: 'Oil', unit: '°C', accent: C.teal });
+
+  meter('m-egt', 'Exhaust gas, pre-turbo', car.egt, '°C', 200, 900, { caution: 720, alert: 780 });
+  meter('m-cac', 'Charge air', car.cac, '°C', 0, 90, { caution: 55, alert: 70 });
+  meter('m-tq', 'Engine torque', car.torque, 'Nm', 0, 650, { caution: 580 });
+  meter('m-batt1', 'Battery', car.battery, 'V', 10, 16, { cool: 12.4, digits: 1 });
+
+  document.getElementById('gear').textContent = car.gear;
+  document.getElementById('tq2').textContent = car.torque.toFixed(0);
+  document.getElementById('lockup').innerHTML = car.slip
+    ? `<span class="dot" style="background:${C.caution}"></span>Converter slipping`
+    : `<span class="dot" style="background:${C.teal}"></span>Converter locked`;
+  meter('m-atf', 'ATF temperature', car.atf, '°C', 40, 130, { cool: 65, caution: 105, alert: 115 });
+  meter('m-cool', 'Coolant', car.coolant, '°C', 50, 130, { cool: 80, caution: 105, alert: 115 });
+  meter('m-oil', 'Oil', car.oil, '°C', 50, 150, { cool: 85, caution: 125, alert: 138 });
+
+  // 4Motion (only draw when visible — canvases have no size while hidden)
+  if (state.view === 'offroad') {
+    const steer = Math.round(car.steer), pitch = Math.round(car.pitch), roll = Math.round(car.roll);
+    const pitchCol = angleColor(car.pitch, 25, 35), rollCol = angleColor(car.roll, 20, 30);
+    document.getElementById('steer').textContent = Math.abs(steer) + '°';
+    document.getElementById('steerDir').textContent = steer > 0 ? 'right' : steer < 0 ? 'left' : 'centre';
+    document.getElementById('pitch').textContent = Math.abs(pitch) + '°';
+    document.getElementById('pitch').style.color = pitchCol === C.teal ? C.text : pitchCol;
+    document.getElementById('pitchDir').textContent = pitch > 0 ? 'nose up' : pitch < 0 ? 'nose down' : 'level';
+    document.getElementById('roll').textContent = Math.abs(roll) + '°';
+    document.getElementById('roll').style.color = rollCol === C.teal ? C.text : rollCol;
+    document.getElementById('rollDir').textContent = roll > 0 ? 'right side down' : roll < 0 ? 'left side down' : 'level';
+    drawSteering(car.steer);
+    drawPitch(car.pitch, pitchCol);
+    drawRoll(car.roll, rollCol);
+    drawChassis(car.wheels, car.rearLocked);
+    for (const k of ['fl', 'fr', 'rl', 'rr']) {
+      const el = document.getElementById('s-' + k), v = car.wheels[k];
+      el.textContent = v.toFixed(1) + '%';
+      el.style.color = v >= 6 ? slipColor(v) : C.text2;
     }
+    const m = car.maxSlip;
+    document.getElementById('traction').innerHTML = m >= 15 ? statusHtml('Wheels slipping', C.alert) : m >= 6 ? statusHtml('Light slip', C.caution) : statusHtml('Full grip', C.teal);
+    const rear = Math.round(car.rearTorque);
+    document.getElementById('centreDiff').innerHTML = statusHtml(`Torsen · ${100 - rear} : ${rear}`, C.teal);
+    document.getElementById('rearDiff').innerHTML = car.rearLocked ? statusHtml('Engaged', C.accent) : statusHtml('Open', C.text3);
+    document.getElementById('splitF').style.flexGrow = 100 - car.rearTorque;
+    document.getElementById('splitR').style.flexGrow = car.rearTorque;
+    meter('m-slip', 'Highest wheel slip', m, '%', 0, 30, { caution: 6, alert: 15, digits: 1 });
+  }
 
-    function setThrottlePreset(val) {
-      document.getElementById('throttleSlider').value = val;
-      onThrottleChange(val);
+  document.getElementById('fuel').textContent = car.fuel.toFixed(1) + ' L/h';
+  document.getElementById('peak').textContent = fmtBoost(boostFrom(state.peakKPa, u), u) + ' ' + u;
+  document.getElementById('throttleOut').textContent = Math.round(state.throttle * 100) + '%';
+  document.querySelectorAll('#presets button').forEach(b =>
+    b.setAttribute('aria-pressed', String(Math.abs(b.dataset.t / 100 - state.throttle) < 0.02)));
+}
+
+function renderFaults() {
+  const n = faults.length;
+  const link = document.getElementById('faultsLink');
+  link.innerHTML = n ? `Faults&nbsp;&nbsp;${n}` : 'Faults';
+  link.classList.toggle('alert', n > 0);
+  document.getElementById('notice').hidden = n === 0 || state.view === 'faults';
+  document.getElementById('noticeText').textContent = `${n} fault code${n === 1 ? '' : 's'} stored`;
+  document.getElementById('noticeCodes').innerHTML = faults.map(f => f.code).join('&nbsp;&nbsp;');
+  const mil = document.getElementById('milText');
+  mil.textContent = n ? `Check-engine light on · ${n} code${n === 1 ? '' : 's'}` : 'Check-engine light off';
+  mil.style.color = n ? C.alert : C.text2;
+  document.getElementById('clearBtn').disabled = n === 0;
+
+  const visible = faults.filter(f => state.filter === 'all' || f.sev === state.filter);
+  const list = document.getElementById('list');
+  list.hidden = visible.length === 0;
+  document.getElementById('empty').hidden = visible.length !== 0;
+  document.getElementById('emptyTitle').textContent = n ? `No ${state.filter} codes` : 'No fault codes';
+  document.getElementById('emptyText').textContent = n ? 'Try another filter.' : 'The engine ECU reports nothing stored or pending.';
+
+  list.innerHTML = visible.map(f => `
+    <div class="row" data-code="${f.code}">
+      <div class="row-main">
+        <span class="code num">${f.code}</span>
+        <div style="flex:1"><div class="title">${f.title}</div><div class="meta">${f.system} · 7E0 · Engine</div></div>
+        <span class="dot" style="background:${f.sev === 'pending' ? C.caution : C.alert}"></span>
+        <span class="sev">${f.sev === 'pending' ? 'Pending' : 'Stored'}</span>
+        <span class="more">${state.expanded === f.code ? 'Hide' : 'Details'}</span>
+      </div>
+      <div class="detail" ${state.expanded === f.code ? '' : 'hidden'}>
+        <div>${f.desc}</div>
+        <h4>Freeze frame</h4>
+        <div class="ff">${f.ff.map(([k, v]) => `<div><div class="k">${k}</div><div class="v num">${v}</div></div>`).join('')}</div>
+        <h4>Common causes</h4>
+        <ol>${f.causes.map(c => `<li>${c}</li>`).join('')}</ol>
+      </div>
+    </div>`).join('');
+}
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.view === view)));
+  document.querySelectorAll('section.view').forEach(s => { s.hidden = s.dataset.view !== view; });
+  renderFaults();
+  render();
+}
+
+/* ── Wiring ─────────────────────────────────────────────────────────────── */
+document.querySelectorAll('[data-view]:not(section)').forEach(el => el.addEventListener('click', () => setView(el.dataset.view)));
+document.querySelectorAll('[data-unit]').forEach(b => b.addEventListener('click', () => {
+  state.unit = b.dataset.unit;
+  document.querySelectorAll('[data-unit]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  render();
+}));
+document.getElementById('demoLink').addEventListener('click', e => {
+  const demo = document.getElementById('demo');
+  demo.hidden = !demo.hidden;
+  e.currentTarget.classList.toggle('on', !demo.hidden);
+});
+document.getElementById('throttle').addEventListener('input', e => { state.throttle = e.target.value / 100; render(); });
+document.querySelectorAll('#presets button').forEach(b => b.addEventListener('click', () => {
+  state.throttle = b.dataset.t / 100;
+  document.getElementById('throttle').value = b.dataset.t;
+  render();
+}));
+document.getElementById('resetPeak').addEventListener('click', () => { state.peakKPa = null; render(); });
+document.querySelectorAll('#filters button').forEach(b => b.addEventListener('click', () => {
+  state.filter = b.dataset.f;
+  document.querySelectorAll('#filters button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderFaults();
+}));
+document.getElementById('list').addEventListener('click', e => {
+  const row = e.target.closest('.row');
+  if (!row) return;
+  state.expanded = state.expanded === row.dataset.code ? null : row.dataset.code;
+  renderFaults();
+});
+document.getElementById('scanBtn').addEventListener('click', () => {
+  const btn = document.getElementById('scanBtn'), fill = document.getElementById('scanFill');
+  btn.disabled = true;
+  let p = 0;
+  const timer = setInterval(() => {
+    p += 10;
+    fill.style.width = p + '%';
+    btn.textContent = `Scanning… ${p}%`;
+    if (p >= 100) {
+      clearInterval(timer);
+      setTimeout(() => { fill.style.width = '0'; btn.textContent = 'Scan'; btn.disabled = false; }, 250);
     }
+  }, 120);
+});
+const confirmBox = document.getElementById('confirm');
+const showConfirm = show => { confirmBox.hidden = !show; };
+document.getElementById('clearBtn').addEventListener('click', () => showConfirm(true));
+document.getElementById('cancelClear').addEventListener('click', () => showConfirm(false));
+document.getElementById('confirmClear').addEventListener('click', () => {
+  faults = []; state.expanded = null; showConfirm(false); renderFaults();
+});
 
-    function drawDial(canvasId, options) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      const cx = w / 2;
-      const cy = h / 2;
-      const r = (w / 2) - 15;
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { buildDials(); render(); }, 150); });
 
-      ctx.clearRect(0, 0, w, h);
-
-      const startAngle = (135 * Math.PI) / 180;
-      const sweepAngle = (270 * Math.PI) / 180;
-      const totalSpan = options.max - options.min;
-
-      // Track
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, startAngle, startAngle + sweepAngle);
-      ctx.lineWidth = 10;
-      ctx.strokeStyle = '#181B22';
-      ctx.lineCap = 'round';
-      ctx.stroke();
-
-      // Negative Zone
-      if (options.zeroThreshold !== undefined) {
-        const zeroFraction = (options.zeroThreshold - options.min) / totalSpan;
-        const zeroAngle = startAngle + zeroFraction * sweepAngle;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, startAngle, zeroAngle);
-        ctx.lineWidth = 10;
-        ctx.strokeStyle = '#00B0FF';
-        ctx.stroke();
-      }
-
-      // Redline Zone
-      if (options.dangerThreshold !== undefined) {
-        const dangerFraction = (options.dangerThreshold - options.min) / totalSpan;
-        const dangerAngle = startAngle + dangerFraction * sweepAngle;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, dangerAngle, startAngle + sweepAngle);
-        ctx.lineWidth = 10;
-        ctx.strokeStyle = '#FF334B';
-        ctx.lineCap = 'round';
-        ctx.stroke();
-      }
-
-      // Active Arc
-      const currentFraction = Math.max(0, Math.min(1, (options.value - options.min) / totalSpan));
-      const currentAngle = startAngle + currentFraction * sweepAngle;
-      if (currentFraction > 0.01) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, startAngle, currentAngle);
-        ctx.lineWidth = 9;
-        ctx.strokeStyle = (options.zeroThreshold !== undefined && options.value < options.zeroThreshold) ? '#00E5FF' : (options.activeColor || '#F5A623');
-        ctx.lineCap = 'round';
-        ctx.stroke();
-      }
-
-      // Ticks
-      const tickCount = Math.round(totalSpan / options.majorStep);
-      for (let i = 0; i <= tickCount; i++) {
-        const tickVal = options.min + i * options.majorStep;
-        if (tickVal > options.max + 0.01) break;
-        const frac = (tickVal - options.min) / totalSpan;
-        const ang = startAngle + frac * sweepAngle;
-        const cosA = Math.cos(ang);
-        const sinA = Math.sin(ang);
-
-        const isDanger = options.dangerThreshold !== undefined && tickVal >= options.dangerThreshold;
-        const isVac = options.zeroThreshold !== undefined && tickVal < options.zeroThreshold;
-        const tickColor = isDanger ? '#FF4444' : (isVac ? '#00E5FF' : '#A0AEC0');
-
-        ctx.beginPath();
-        ctx.moveTo(cx + (r - 12) * cosA, cy + (r - 12) * sinA);
-        ctx.lineTo(cx + r * cosA, cy + r * sinA);
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = tickColor;
-        ctx.stroke();
-
-        const textR = r - 25;
-        ctx.fillStyle = tickColor;
-        ctx.font = 'bold 9px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const labelText = options.formatLabel ? options.formatLabel(tickVal) : tickVal.toFixed(0);
-        ctx.fillText(labelText, cx + textR * cosA, cy + textR * sinA);
-      }
-
-      // Needle
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(currentAngle - Math.PI / 2);
-      ctx.beginPath();
-      ctx.moveTo(-4, 0);
-      ctx.lineTo(0, -(r - 10));
-      ctx.lineTo(4, 0);
-      ctx.lineTo(0, 12);
-      ctx.closePath();
-
-      const needleColor = (options.dangerThreshold !== undefined && options.value >= options.dangerThreshold) ? '#FF4444' : (options.needleColor || '#F5A623');
-      ctx.fillStyle = needleColor;
-      ctx.shadowColor = needleColor;
-      ctx.shadowBlur = 6;
-      ctx.fill();
-      ctx.restore();
-
-      // Hub
-      ctx.beginPath();
-      ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-      ctx.fillStyle = '#222733';
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#384257';
-      ctx.stroke();
-    }
-
-    function updateCluster() {
-      const frac = throttleVal / 100;
-
-      // Tachometer
-      const rpm = 800 + frac * 3500;
-      document.getElementById('tachValueText').innerText = Math.round(rpm).toLocaleString();
-      drawDial('tachCanvas', {
-        min: 0, max: 6000, value: rpm, majorStep: 1000, dangerThreshold: 4500,
-        formatLabel: (v) => (v / 1000).toFixed(0), activeColor: '#F5A623'
-      });
-
-      // Boost
-      const boostKPa = 95 + frac * 165;
-      if (boostKPa > peakKPa) peakKPa = boostKPa;
-
-      const boostBar = (boostKPa - 100) / 100;
-      const boostPsi = boostBar * 14.5038;
-      const peakBar = (peakKPa - 100) / 100;
-      const peakPsi = peakBar * 14.5038;
-
-      const isBar = currentUnit === 'BAR';
-      const boostVal = isBar ? boostBar : boostPsi;
-      const peakVal = isBar ? peakBar : peakPsi;
-      const sign = boostVal >= 0 ? '+' : '';
-
-      const boostStr = sign + boostVal.toFixed(isBar ? 2 : 1);
-      document.getElementById('boostValueText').innerText = boostStr;
-      document.getElementById('transBoostValueText').innerText = boostStr;
-      document.getElementById('offroadBoostValueText').innerText = boostStr;
-
-      document.getElementById('boostPeakText').innerText = 'PK ' + (peakVal >= 0 ? '+' : '') + peakVal.toFixed(isBar ? 2 : 1);
-      document.getElementById('peakFooterText').innerText = (peakVal >= 0 ? '+' : '') + peakVal.toFixed(isBar ? 2 : 1) + ' ' + currentUnit;
-
-      const boostOpts = {
-        min: isBar ? -1.0 : -15, max: isBar ? 2.5 : 35, value: boostVal, peak: peakVal,
-        zeroThreshold: 0, majorStep: isBar ? 0.5 : 10, dangerThreshold: isBar ? 2.2 : 31,
-        formatLabel: (v) => isBar ? v.toFixed(1) : v.toFixed(0), activeColor: '#F5A623'
-      };
-
-      drawDial('boostCanvas', boostOpts);
-      drawDial('transBoostCanvas', boostOpts);
-      drawDial('offroadBoostCanvas', boostOpts);
-
-      // Speedometer
-      const speed = frac * 135;
-      document.getElementById('speedValueText').innerText = Math.round(speed);
-      drawDial('speedCanvas', {
-        min: 0, max: 220, value: speed, majorStep: 20, dangerThreshold: 180,
-        formatLabel: (v) => v.toFixed(0), activeColor: '#00E5FF', needleColor: '#00E5FF'
-      });
-
-      // Turbo Telemetry
-      const egt = 310 + frac * 470;
-      document.getElementById('egtVal').innerText = Math.round(egt) + ' °C';
-      document.getElementById('egtBar').style.width = ((egt - 200) / 700 * 100) + '%';
-
-      const chargeAir = 30 + frac * 28;
-      document.getElementById('chargeAirVal').innerText = Math.round(chargeAir) + ' °C';
-      document.getElementById('chargeAirBar').style.width = (chargeAir / 90 * 100) + '%';
-
-      const vgt = 35 + frac * 55;
-      document.getElementById('vgtVal').innerText = Math.round(vgt) + ' %';
-      document.getElementById('vgtBar').style.width = vgt + '%';
-
-      const torque = Math.round(110 + frac * 470);
-      document.getElementById('torqueVal').innerText = torque + ' Nm';
-      document.getElementById('torqueBar').style.width = (torque / 650 * 100) + '%';
-      document.getElementById('transTorqueDisplay').innerHTML = torque + ' <span class="text-xs text-amber-400">Nm</span>';
-      document.getElementById('offroadTorque').innerText = torque + ' Nm';
-
-      // ZF 8HP Telemetry
-      const gear = speed < 15 ? "D1" : (speed < 32 ? "D2" : (speed < 50 ? "D3" : (speed < 70 ? "D4" : (speed < 92 ? "D5" : (speed < 112 ? "D6" : (speed < 130 ? "D7" : "D8"))))));
-      document.getElementById('gearDisplay').innerText = gear;
-
-      const isSlipping = frac > 0.85 && speed < 50;
-      const lockupBadge = document.getElementById('lockupBadge');
-      if (isSlipping) {
-        lockupBadge.innerText = "LOCKUP: SLIP";
-        lockupBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 border border-amber-500 text-amber-400";
-      } else {
-        lockupBadge.innerText = "LOCKUP: LOCKED";
-        lockupBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-[#3DDC84]/20 border border-[#3DDC84] text-[#3DDC84]";
-      }
-
-      const atf = 82 + frac * 14;
-      document.getElementById('atfTempDisplay').innerText = Math.round(atf) + ' °C';
-      document.getElementById('atfBar').style.width = ((atf - 40) / 80 * 100) + '%';
-
-      const coolant = Math.round(88 + frac * 8);
-      document.getElementById('transCoolant').innerText = coolant + ' °C';
-      const oil = Math.round(92 + frac * 14);
-      document.getElementById('transOil').innerText = oil + ' °C';
-
-      // 4Motion Telemetry
-      const steer = Math.round(frac * 30 - 15);
-      document.getElementById('offroadSteering').innerText = (steer > 0 ? 'R ' : (steer < 0 ? 'L ' : '')) + Math.abs(steer) + '°';
-
-      const pitch = Math.round(frac * 18 - 4);
-      document.getElementById('offroadPitch').innerText = (pitch > 0 ? '+' : '-') + Math.abs(pitch) + '°';
-
-      const slip = (frac * 8.5).toFixed(1);
-      document.getElementById('offroadSlipVal').innerText = slip + ' %';
-      document.getElementById('offroadSlipBar').style.width = (slip / 30 * 100) + '%';
-
-      const battery = (14.2 - frac * 0.3).toFixed(1);
-      document.getElementById('offroadBattery').innerText = battery + ' V';
-
-      const fuel = (1.4 + frac * 13.8).toFixed(1);
-      document.getElementById('fuelText').innerText = fuel + ' L/h';
-    }
-
-    function scanDtc() {
-      const btn = document.getElementById('scanBtn');
-      const bar = document.getElementById('scanProgressBar');
-      const fill = document.getElementById('scanProgressFill');
-      btn.disabled = true;
-      btn.innerText = "SCANNING...";
-      bar.classList.remove('hidden');
-      fill.style.width = '0%';
-      let prog = 0;
-      const interval = setInterval(() => {
-        prog += 20;
-        fill.style.width = prog + '%';
-        if (prog >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            bar.classList.add('hidden');
-            btn.disabled = false;
-            btn.innerText = "SCAN ECU";
-          }, 300);
-        }
-      }, 150);
-    }
-
-    function clearDtc() {
-      if (confirm("Clear all ECU Diagnostic Trouble Codes (Mode 04)? This will reset stored codes and turn off MIL.")) {
-        document.getElementById('dtcList').classList.add('hidden');
-        document.getElementById('noCodesBanner').classList.remove('hidden');
-        document.getElementById('dtcBanner').classList.add('hidden');
-        document.getElementById('tabDtc').innerText = "DTCs (0)";
-      }
-    }
-
-    window.onload = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tab = urlParams.get('tab') || window.location.hash.replace('#', '');
-      if (tab && ['turbo', 'trans', 'offroad', 'dtc'].includes(tab)) {
-        setActiveTab(tab);
-      } else {
-        updateCluster();
-      }
-    };
-  </script>
+buildDials();
+document.getElementById('demo').hidden = true;
+const initial = new URLSearchParams(location.search).get('tab') || location.hash.slice(1);
+setView(['cluster', 'driveline', 'offroad', 'faults'].includes(initial) ? initial : 'cluster');
+render();
+</script>
 </body>
 </html>

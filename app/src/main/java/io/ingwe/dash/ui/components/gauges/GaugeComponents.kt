@@ -1,1033 +1,561 @@
-package io.ingwe.dash.ui.components.gauges
+﻿package io.ingwe.dash.ui.components.gauges
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.text.*
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ingwe.dash.ui.theme.*
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
-/**
- * Unit for the Boost Gauge.
- */
-enum class BoostUnit(val label: String, val minVal: Float, val maxVal: Float, val zeroOffsetFraction: Float) {
-    BAR("BAR", -1.0f, 2.5f, 1.0f / 3.5f),   // -1.0 to +2.5 bar (3.5 bar span, zero is at ~28.5%)
-    PSI("PSI", -15.0f, 35.0f, 15.0f / 50.0f) // -15 to +35 psi (50 psi span, zero is at 30%)
+/** Display unit for boost pressure. Ranges are gauge (relative) pressure. */
+enum class BoostUnit(val label: String) {
+    BAR("bar"),
+    PSI("psi"),
 }
 
+private const val KPA_PER_BAR = 100f
+private const val PSI_PER_BAR = 14.5038f
+private const val AMBIENT_KPA = 100f
+
+/** Convert absolute manifold pressure (kPa) to gauge pressure in [unit]. */
+fun boostFromKPa(absKPa: Float, unit: BoostUnit): Float {
+    val bar = (absKPa - AMBIENT_KPA) / KPA_PER_BAR
+    return if (unit == BoostUnit.BAR) bar else bar * PSI_PER_BAR
+}
+
+fun formatBoost(value: Float, unit: BoostUnit): String {
+    val pattern = if (unit == BoostUnit.BAR) "%+.2f" else "%+.1f"
+    return pattern.format(value)
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Dial gauge
+ * ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * Sleek, circular Canvas-based automotive dial gauge with customizable ticks,
- * color-coded zones, smooth tapered needle, center hub cap, and digital readout.
+ * Flat circular dial: thin track, value arc, fine ticks, slim needle and a
+ * centred numeric readout. Colour only changes when the value enters a zone
+ * that matters (caution / redline / vacuum).
  */
 @Composable
-fun CircularDialGauge(
+fun DialGauge(
     value: Float,
     min: Float,
     max: Float,
     label: String,
     unit: String,
     modifier: Modifier = Modifier,
-    size: Dp = 190.dp,
-    startAngle: Float = 135f,
-    sweepAngle: Float = 270f,
-    majorTickStep: Float = 1f,
-    minorTicksPerMajor: Int = 4,
-    warningThreshold: Float? = null,
-    dangerThreshold: Float? = null,
-    zeroThreshold: Float? = null,
-    primaryColor: Color = IngwePrimary,
-    warningColor: Color = IngweWarning,
-    dangerColor: Color = IngweError,
-    negativeZoneColor: Color = Color(0xFF00E5FF),
-    peakValue: Float? = null,
-    valueFormatter: (Float) -> String = { "%.0f".format(it) },
-    tickFormatter: ((Float) -> String)? = null,
-    subtitle: String? = null,
-    onHeaderClick: (() -> Unit)? = null,
+    size: Dp = 200.dp,
+    majorStep: Float,
+    minorPerMajor: Int = 4,
+    cautionFrom: Float? = null,
+    redlineFrom: Float? = null,
+    zeroAt: Float? = null,
+    coolBelow: Float? = null,
+    peak: Float? = null,
+    accent: Color = IngweAccent,
+    compact: Boolean = false,
+    valueText: (Float) -> String = { "%.0f".format(it) },
+    tickLabel: (Float) -> String = { "%.0f".format(it) },
 ) {
-    val clampedValue = value.coerceIn(min, max)
-    val animatedValue by animateFloatAsState(
-        targetValue = clampedValue,
-        animationSpec = tween(durationMillis = 250),
-        label = "gauge_needle_anim"
+    val animated by animateFloatAsState(
+        targetValue = value.coerceIn(min, max),
+        animationSpec = tween(durationMillis = 220),
+        label = "dial",
     )
-
     val textMeasurer = rememberTextMeasurer()
 
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFF1E2229),
-                        Color(0xFF111317),
-                        Color(0xFF090A0C)
-                    )
-                )
-            )
-            .border(
-                width = 2.dp,
-                brush = Brush.sweepGradient(
-                    colors = listOf(
-                        Color(0xFF3A3F4B),
-                        Color(0xFF1A1C20),
-                        Color(0xFF4A5160),
-                        Color(0xFF1A1C20),
-                        Color(0xFF3A3F4B)
-                    )
-                ),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(this.size.width / 2f, this.size.height / 2f)
-            val radius = this.size.width / 2f
-            val dialRadius = radius * 0.90f
-            val arcStrokeWidth = radius * 0.075f
+    val state = when {
+        redlineFrom != null && animated >= redlineFrom -> IngweAlert
+        cautionFrom != null && animated >= cautionFrom -> IngweCaution
+        zeroAt != null && animated < zeroAt -> IngweCool
+        coolBelow != null && animated < coolBelow -> IngweCool
+        else -> accent
+    }
 
-            // 1. Draw outer subtle track arc
-            drawArc(
-                color = Color(0xFF1A1D24),
-                startAngle = startAngle,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                topLeft = Offset(center.x - dialRadius, center.y - dialRadius),
-                size = Size(dialRadius * 2, dialRadius * 2),
-                style = Stroke(width = arcStrokeWidth, cap = StrokeCap.Round)
-            )
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val startAngle = 135f
+            val sweep = 270f
+            val radius = this.size.minDimension / 2f
+            val arcRadius = radius * 0.92f
+            val track = radius * if (compact) 0.04f else 0.025f
+            val span = max - min
+            fun angleOf(v: Float) = startAngle + ((v - min) / span) * sweep
 
-            // 2. Draw colored zone arcs
-            val totalSpan = max - min
-            fun valueToAngle(v: Float): Float {
-                val fraction = (v - min) / totalSpan
-                return startAngle + fraction * sweepAngle
-            }
-
-            // Negative zone (for boost/vacuum)
-            if (zeroThreshold != null && zeroThreshold > min) {
-                val zeroAngle = valueToAngle(zeroThreshold)
-                val negSweep = zeroAngle - startAngle
+            fun arc(color: Color, from: Float, to: Float, width: Float, cap: StrokeCap = StrokeCap.Butt) {
+                if (to <= from) return
                 drawArc(
-                    brush = Brush.sweepGradient(
-                        colors = listOf(negativeZoneColor.copy(alpha = 0.3f), negativeZoneColor),
-                        center = center
-                    ),
-                    startAngle = startAngle,
-                    sweepAngle = negSweep,
+                    color = color,
+                    startAngle = angleOf(from),
+                    sweepAngle = angleOf(to) - angleOf(from),
                     useCenter = false,
-                    topLeft = Offset(center.x - dialRadius, center.y - dialRadius),
-                    size = Size(dialRadius * 2, dialRadius * 2),
-                    style = Stroke(width = arcStrokeWidth, cap = StrokeCap.Butt)
+                    topLeft = Offset(center.x - arcRadius, center.y - arcRadius),
+                    size = Size(arcRadius * 2, arcRadius * 2),
+                    style = Stroke(width = width, cap = cap),
                 )
             }
 
-            // Warning zone arc
-            if (warningThreshold != null && warningThreshold < max) {
-                val warnAngle = valueToAngle(warningThreshold)
-                val dangerStart = dangerThreshold ?: max
-                val dangerAngle = valueToAngle(dangerStart)
-                val warnSweep = dangerAngle - warnAngle
-                drawArc(
-                    color = warningColor.copy(alpha = 0.8f),
-                    startAngle = warnAngle,
-                    sweepAngle = warnSweep,
-                    useCenter = false,
-                    topLeft = Offset(center.x - dialRadius, center.y - dialRadius),
-                    size = Size(dialRadius * 2, dialRadius * 2),
-                    style = Stroke(width = arcStrokeWidth, cap = StrokeCap.Butt)
-                )
-            }
+            // Track and zones
+            arc(IngweHairline, min, max, track)
+            if (zeroAt != null) arc(IngweCool.copy(alpha = 0.35f), min, zeroAt, track)
+            if (coolBelow != null) arc(IngweCool.copy(alpha = 0.35f), min, coolBelow, track)
+            if (cautionFrom != null) arc(IngweCaution.copy(alpha = 0.45f), cautionFrom, redlineFrom ?: max, track)
+            if (redlineFrom != null) arc(IngweAlert.copy(alpha = 0.8f), redlineFrom, max, track)
 
-            // Danger / Redline zone arc
-            if (dangerThreshold != null && dangerThreshold < max) {
-                val dangerAngle = valueToAngle(dangerThreshold)
-                val dangerSweep = (startAngle + sweepAngle) - dangerAngle
-                drawArc(
-                    color = dangerColor,
-                    startAngle = dangerAngle,
-                    sweepAngle = dangerSweep,
-                    useCenter = false,
-                    topLeft = Offset(center.x - dialRadius, center.y - dialRadius),
-                    size = Size(dialRadius * 2, dialRadius * 2),
-                    style = Stroke(width = arcStrokeWidth, cap = StrokeCap.Round)
-                )
-            }
+            // Value arc — from zero (boost) or from min (everything else)
+            val origin = zeroAt ?: min
+            val (from, to) = if (animated >= origin) origin to animated else animated to origin
+            arc(state, from, to, radius * if (compact) 0.07f else 0.045f, StrokeCap.Round)
 
-            // Active value fill arc
-            val currentFraction = (animatedValue - min) / totalSpan
-            val currentAngle = currentFraction * sweepAngle
-            if (currentAngle > 0.5f) {
-                val activeBrush = if (zeroThreshold != null && animatedValue < zeroThreshold) {
-                    Brush.sweepGradient(
-                        colors = listOf(negativeZoneColor.copy(alpha = 0.5f), negativeZoneColor),
-                        center = center
-                    )
-                } else {
-                    Brush.sweepGradient(
-                        colors = listOf(primaryColor.copy(alpha = 0.6f), primaryColor, warningColor),
-                        center = center
-                    )
-                }
-
-                drawArc(
-                    brush = activeBrush,
-                    startAngle = startAngle,
-                    sweepAngle = currentAngle,
-                    useCenter = false,
-                    topLeft = Offset(center.x - dialRadius, center.y - dialRadius),
-                    size = Size(dialRadius * 2, dialRadius * 2),
-                    style = Stroke(width = arcStrokeWidth * 0.85f, cap = StrokeCap.Round)
-                )
-            }
-
-            // 3. Draw Ticks & Numbers
-            val majorTickCount = ((max - min) / majorTickStep).roundToInt()
-            val innerMajorRadius = dialRadius - radius * 0.15f
-            val innerMinorRadius = dialRadius - radius * 0.08f
-            val textRadius = dialRadius - radius * 0.28f
-
-            for (i in 0..majorTickCount) {
-                val tickVal = min + i * majorTickStep
-                if (tickVal > max + 0.001f) break
-                val tickFraction = (tickVal - min) / totalSpan
-                val angleDeg = startAngle + tickFraction * sweepAngle
-                val angleRad = Math.toRadians(angleDeg.toDouble())
-
-                val cosA = cos(angleRad).toFloat()
-                val sinA = sin(angleRad).toFloat()
-
+            // Ticks
+            val majorCount = ((max - min) / majorStep).roundToInt()
+            for (i in 0..majorCount) {
+                val v = min + i * majorStep
                 val tickColor = when {
-                    dangerThreshold != null && tickVal >= dangerThreshold -> dangerColor
-                    warningThreshold != null && tickVal >= warningThreshold -> warningColor
-                    zeroThreshold != null && tickVal < zeroThreshold -> negativeZoneColor
-                    else -> IngweOnSurface.copy(alpha = 0.75f)
+                    redlineFrom != null && v >= redlineFrom -> IngweAlert
+                    else -> IngweTextSecondary
                 }
+                radialLine(angleOf(v), arcRadius - radius * 0.10f, arcRadius - radius * 0.045f, tickColor, radius * if (compact) 0.02f else 0.014f)
 
-                // Major tick line
-                val outerP = Offset(center.x + dialRadius * cosA, center.y + dialRadius * sinA)
-                val innerP = Offset(center.x + innerMajorRadius * cosA, center.y + innerMajorRadius * sinA)
-                drawLine(
-                    color = tickColor,
-                    start = innerP,
-                    end = outerP,
-                    strokeWidth = radius * 0.024f,
-                    cap = StrokeCap.Round
-                )
-
-                // Tick number label
-                val labelText = tickFormatter?.invoke(tickVal) ?: run {
-                    if (majorTickStep >= 1f) "%.0f".format(tickVal) else "%.1f".format(tickVal)
-                }
-                val textLayout = textMeasurer.measure(
-                    text = AnnotatedString(labelText),
-                    style = TextStyle(
-                        color = tickColor.copy(alpha = 0.9f),
-                        fontSize = (radius * 0.11f).sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif
+                val label = if (compact) "" else tickLabel(v)
+                if (label.isNotEmpty()) {
+                    val layout = textMeasurer.measure(
+                        text = label,
+                        style = TextStyle(
+                            color = if (tickColor == IngweAlert) IngweAlert else IngweTextTertiary,
+                            fontSize = (radius * 0.085f).toSp(), // px → sp via density
+                            fontWeight = FontWeight.Medium,
+                            fontFeatureSettings = "tnum",
+                        ),
                     )
-                )
-                val textPos = Offset(
-                    center.x + textRadius * cosA - (textLayout.size.width / 2f),
-                    center.y + textRadius * sinA - (textLayout.size.height / 2f)
-                )
-                drawText(textLayout, topLeft = textPos)
+                    val rad = Math.toRadians(angleOf(v).toDouble())
+                    val labelRadius = arcRadius - radius * 0.20f
+                    drawText(
+                        layout,
+                        topLeft = Offset(
+                            center.x + labelRadius * cos(rad).toFloat() - layout.size.width / 2f,
+                            center.y + labelRadius * sin(rad).toFloat() - layout.size.height / 2f,
+                        ),
+                    )
+                }
 
-                // Minor ticks between majors
-                if (i < majorTickCount) {
-                    val minorStep = majorTickStep / (minorTicksPerMajor + 1)
-                    for (m in 1..minorTicksPerMajor) {
-                        val minorVal = tickVal + m * minorStep
-                        if (minorVal > max) break
-                        val minorFraction = (minorVal - min) / totalSpan
-                        val mAngleDeg = startAngle + minorFraction * sweepAngle
-                        val mAngleRad = Math.toRadians(mAngleDeg.toDouble())
-                        val mCosA = cos(mAngleRad).toFloat()
-                        val mSinA = sin(mAngleRad).toFloat()
-
-                        val mOuterP = Offset(center.x + dialRadius * mCosA, center.y + dialRadius * mSinA)
-                        val mInnerP = Offset(center.x + innerMinorRadius * mCosA, center.y + innerMinorRadius * mSinA)
-                        drawLine(
-                            color = tickColor.copy(alpha = 0.35f),
-                            start = mInnerP,
-                            end = mOuterP,
-                            strokeWidth = radius * 0.012f
-                        )
+                if (i < majorCount && !compact) {
+                    for (m in 1..minorPerMajor) {
+                        val mv = v + m * majorStep / (minorPerMajor + 1)
+                        radialLine(angleOf(mv), arcRadius - radius * 0.07f, arcRadius - radius * 0.045f, IngweTextTertiary, radius * 0.008f)
                     }
                 }
             }
 
-            // 4. Peak hold marker
-            if (peakValue != null && peakValue in min..max) {
-                val peakAngle = valueToAngle(peakValue)
-                val peakRad = Math.toRadians(peakAngle.toDouble())
-                val peakCos = cos(peakRad).toFloat()
-                val peakSin = sin(peakRad).toFloat()
-                val pStart = Offset(center.x + (dialRadius - radius * 0.12f) * peakCos, center.y + (dialRadius - radius * 0.12f) * peakSin)
-                val pEnd = Offset(center.x + dialRadius * peakCos, center.y + dialRadius * peakSin)
-                drawLine(
-                    color = dangerColor,
-                    start = pStart,
-                    end = pEnd,
-                    strokeWidth = radius * 0.035f,
-                    cap = StrokeCap.Round
-                )
+            // Peak hold — a small mark just outside the track
+            if (peak != null && peak in min..max) {
+                radialLine(angleOf(peak), arcRadius + radius * 0.025f, arcRadius + radius * 0.075f, IngweTextPrimary, radius * 0.016f)
             }
 
-            // 5. Draw Tapered Needle
-            val needleAngle = startAngle + currentFraction * sweepAngle
-            val needleLength = dialRadius * 0.90f
-            val needleBaseWidth = radius * 0.05f
-
-            rotate(degrees = needleAngle - 90f, pivot = center) {
-                val needlePath = Path().apply {
-                    moveTo(center.x - needleBaseWidth, center.y)
-                    lineTo(center.x, center.y - needleLength)
-                    lineTo(center.x + needleBaseWidth, center.y)
-                    lineTo(center.x, center.y + radius * 0.18f) // counterweight
-                    close()
-                }
-
-                // Needle shadow
-                drawPath(
-                    path = needlePath,
-                    color = Color.Black.copy(alpha = 0.45f)
-                )
-
-                // Needle body
-                val needleColor = when {
-                    dangerThreshold != null && animatedValue >= dangerThreshold -> dangerColor
-                    zeroThreshold != null && animatedValue < zeroThreshold -> negativeZoneColor
-                    else -> primaryColor
-                }
-
-                drawPath(
-                    path = needlePath,
-                    brush = Brush.linearGradient(
-                        colors = listOf(needleColor.copy(alpha = 0.85f), needleColor, Color.White),
-                        start = Offset(center.x, center.y + radius * 0.18f),
-                        end = Offset(center.x, center.y - needleLength)
-                    )
-                )
-
-                // Needle glowing tip highlight
-                drawCircle(
-                    color = Color.White,
-                    radius = radius * 0.02f,
-                    center = Offset(center.x, center.y - needleLength * 0.95f)
-                )
+            // Needle
+            val needleAngle = angleOf(animated)
+            if (compact) {
+                // Sub-dials: no needle, the arc alone carries the value; readout sits centred.
+                return@Canvas
             }
-
-            // 6. Center Hub cap (layered metallic effect)
-            val hubRadius = radius * 0.22f
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF383E4B), Color(0xFF1E2127), Color(0xFF0C0E11)),
-                    center = center
-                ),
-                radius = hubRadius,
-                center = center
-            )
-            drawCircle(
-                color = primaryColor.copy(alpha = 0.4f),
-                radius = hubRadius * 0.45f,
-                center = center
-            )
-            drawCircle(
-                color = Color.White.copy(alpha = 0.2f),
-                radius = hubRadius * 0.2f,
-                center = center
-            )
+            radialLine(needleAngle, -radius * 0.08f, arcRadius - radius * 0.06f, state, radius * 0.022f, StrokeCap.Round)
+            drawCircle(IngweSurfaceHigh, radius = radius * 0.07f, center = center)
+            drawCircle(state, radius = radius * 0.025f, center = center)
         }
 
-        // 7. Center-Lower Digital Readout & Label
+        // Readout
         Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = size * 0.16f),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = if (compact) {
+                Modifier.align(Alignment.Center).padding(top = size * 0.06f)
+            } else {
+                Modifier.align(Alignment.BottomCenter).padding(bottom = size * 0.08f)
+            },
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = if (onHeaderClick != null) Modifier.clickable { onHeaderClick() } else Modifier
-            ) {
-                Text(
-                    text = label,
-                    color = IngweOnSurface.copy(alpha = 0.7f),
-                    fontSize = (size.value * 0.065f).sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp
-                )
-                if (subtitle != null) {
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "[$subtitle]",
-                        color = primaryColor,
-                        fontSize = (size.value * 0.055f).sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = valueFormatter(animatedValue),
-                    color = when {
-                        dangerThreshold != null && animatedValue >= dangerThreshold -> dangerColor
-                        warningThreshold != null && animatedValue >= warningThreshold -> warningColor
-                        zeroThreshold != null && animatedValue < zeroThreshold -> negativeZoneColor
-                        else -> IngweOnSurface
-                    },
-                    fontSize = (size.value * 0.14f).sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = (-0.5).sp
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(
-                    text = unit,
-                    color = primaryColor,
-                    fontSize = (size.value * 0.065f).sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = (size.value * 0.02f).dp)
-                )
-            }
-
-            if (peakValue != null) {
-                Text(
-                    text = "PK ${valueFormatter(peakValue)}",
-                    color = dangerColor.copy(alpha = 0.85f),
-                    fontSize = (size.value * 0.05f).sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
+            Text(
+                text = valueText(animated),
+                style = ReadoutLarge.copy(fontSize = (size.value * if (compact) 0.22f else 0.17f).sp),
+                color = if (state == IngweAlert) IngweAlert else IngweTextPrimary,
+            )
+            Text(
+                text = if (compact) unit else "$label · $unit",
+                style = LabelStyle,
+                color = IngweTextSecondary,
+            )
+        }
+        if (compact) {
+            Text(
+                text = label,
+                style = LabelStyle,
+                color = IngweTextSecondary,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
 
-/**
- * Dedicated Sleek Boost Gauge with BAR ⇄ PSI toggle, vacuum/boost zones,
- * overboost warning redline, and peak boost memory.
- */
+private fun DrawScope.radialLine(
+    angleDeg: Float,
+    fromRadius: Float,
+    toRadius: Float,
+    color: Color,
+    width: Float,
+    cap: StrokeCap = StrokeCap.Butt,
+) {
+    val rad = Math.toRadians(angleDeg.toDouble())
+    val c = cos(rad).toFloat()
+    val s = sin(rad).toFloat()
+    drawLine(
+        color = color,
+        start = Offset(center.x + fromRadius * c, center.y + fromRadius * s),
+        end = Offset(center.x + toRadius * c, center.y + toRadius * s),
+        strokeWidth = width,
+        cap = cap,
+    )
+}
+
+/** Boost: −1…+2.5 bar (−15…+35 psi) with a vacuum zone, overboost redline and peak hold. */
 @Composable
 fun BoostGauge(
     boostKPa: Float,
+    peakKPa: Float,
     unit: BoostUnit,
-    onToggleUnit: () -> Unit,
     modifier: Modifier = Modifier,
-    size: Dp = 210.dp,
-    peakKPa: Float = boostKPa
+    size: Dp = 220.dp,
 ) {
-    // 100 kPa is approx 1 atm (ambient)
-    // Gauge pressure in Bar: (kPa - 101.3) / 100
-    // Gauge pressure in PSI: ((kPa - 101.3) * 0.145038)
-    val gaugePressureBar = ((boostKPa - 100f) / 100f).coerceIn(-1.0f, 2.5f)
-    val gaugePressurePsi = (gaugePressureBar * 14.5038f).coerceIn(-15.0f, 35.0f)
-
-    val peakBar = ((peakKPa - 100f) / 100f).coerceIn(-1.0f, 2.5f)
-    val peakPsi = (peakBar * 14.5038f).coerceIn(-15.0f, 35.0f)
-
     val isBar = unit == BoostUnit.BAR
-    val displayVal = if (isBar) gaugePressureBar else gaugePressurePsi
-    val peakVal = if (isBar) peakBar else peakPsi
-    val minVal = if (isBar) -1.0f else -15.0f
-    val maxVal = if (isBar) 2.5f else 35.0f
-    val majorStep = if (isBar) 0.5f else 10.0f
-    val warnThreshold = if (isBar) 1.8f else 26.0f
-    val dangerThreshold = if (isBar) 2.2f else 31.0f
-
-    Column(
+    DialGauge(
+        value = boostFromKPa(boostKPa, unit),
+        peak = boostFromKPa(peakKPa, unit),
+        min = if (isBar) -1f else -15f,
+        max = if (isBar) 2.5f else 35f,
+        majorStep = if (isBar) 0.5f else 5f,
+        minorPerMajor = 4,
+        cautionFrom = if (isBar) 1.8f else 26f,
+        redlineFrom = if (isBar) 2.2f else 32f,
+        zeroAt = 0f,
+        label = "Boost",
+        unit = unit.label,
+        size = size,
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Boost gauge unit toggle switch pill
-        Surface(
-            color = Color(0xFF14171D),
-            shape = RoundedCornerShape(12.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, IngweOutline),
-            modifier = Modifier
-                .clickable { onToggleUnit() }
-                .padding(bottom = 6.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "BOOST",
-                    color = IngweOnSurface.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (isBar) "BAR" else "PSI",
-                    color = IngwePrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = "⇄",
-                    color = IngweOnSurface.copy(alpha = 0.5f),
-                    fontSize = 11.sp
-                )
-            }
-        }
-
-        CircularDialGauge(
-            value = displayVal,
-            min = minVal,
-            max = maxVal,
-            label = "BOOST",
-            unit = unit.label,
-            size = size,
-            majorTickStep = majorStep,
-            minorTicksPerMajor = if (isBar) 4 else 1,
-            zeroThreshold = 0f,
-            warningThreshold = warnThreshold,
-            dangerThreshold = dangerThreshold,
-            negativeZoneColor = Color(0xFF00E5FF),
-            primaryColor = IngwePrimary,
-            warningColor = IngweWarning,
-            dangerColor = IngweError,
-            peakValue = peakVal,
-            valueFormatter = {
-                if (isBar) {
-                    (if (it >= 0) "+%.2f" else "%.2f").format(it)
-                } else {
-                    (if (it >= 0) "+%.1f" else "%.1f").format(it)
-                }
-            },
-            tickFormatter = {
-                if (isBar) "%.1f".format(it) else "%.0f".format(it)
-            },
-            subtitle = if (displayVal < 0) "VAC" else "BOOST",
-            onHeaderClick = onToggleUnit
-        )
-    }
+        valueText = { formatBoost(it, unit) },
+        tickLabel = { if (isBar) "%.1f".format(it).removeSuffix(".0") else if (it.roundToInt() % 10 == 0) "%.0f".format(it) else "" },
+    )
 }
 
-/**
- * Dedicated Sleek Tachometer (RPM) Gauge tailored for Amarok Diesel (0-6000 RPM, 4500 Redline).
- */
+/** Engine speed, 0–6000 rpm, redline from 4500 (3.0 V6 TDI). */
 @Composable
-fun TachometerGauge(
-    rpm: Float,
-    modifier: Modifier = Modifier,
-    size: Dp = 210.dp,
-    peakRpm: Float? = null
-) {
-    CircularDialGauge(
+fun TachometerGauge(rpm: Float, modifier: Modifier = Modifier, size: Dp = 200.dp) {
+    DialGauge(
         value = rpm,
         min = 0f,
         max = 6000f,
-        label = "TACHOMETER",
-        unit = "RPM",
+        majorStep = 1000f,
+        minorPerMajor = 3,
+        cautionFrom = 4000f,
+        redlineFrom = 4500f,
+        label = "Engine",
+        unit = "rpm",
         size = size,
-        majorTickStep = 1000f,
-        minorTicksPerMajor = 3,
-        warningThreshold = 4000f,
-        dangerThreshold = 4500f, // Amarok 2.0 BiTDI / 3.0 V6 TDI redline zone
-        primaryColor = IngwePrimary,
-        warningColor = IngweWarning,
-        dangerColor = IngweError,
-        peakValue = peakRpm,
-        valueFormatter = { "%.0f".format(it) },
-        tickFormatter = { "%.0f".format(it / 1000f) }, // Show 0, 1, 2, 3, 4, 5, 6
-        subtitle = "x1000",
-        modifier = modifier
+        modifier = modifier,
+        valueText = { "%,d".format((it / 10f).roundToInt() * 10) },
+        tickLabel = { "%.0f".format(it / 1000f) },
     )
 }
 
-/**
- * Dedicated Sleek Speedometer Gauge (0-220 km/h).
- */
+/** Road speed, 0–220 km/h. */
 @Composable
-fun SpeedometerGauge(
-    speedKmH: Float,
-    modifier: Modifier = Modifier,
-    size: Dp = 190.dp
-) {
-    CircularDialGauge(
+fun SpeedometerGauge(speedKmH: Float, modifier: Modifier = Modifier, size: Dp = 200.dp) {
+    DialGauge(
         value = speedKmH,
         min = 0f,
         max = 220f,
-        label = "SPEED",
+        majorStep = 20f,
+        minorPerMajor = 1,
+        label = "Speed",
         unit = "km/h",
+        accent = IngweTeal,
         size = size,
-        majorTickStep = 20f,
-        minorTicksPerMajor = 1,
-        warningThreshold = 140f,
-        dangerThreshold = 180f,
-        primaryColor = Color(0xFF00E5FF),
-        warningColor = IngweWarning,
-        dangerColor = IngweError,
-        valueFormatter = { "%.0f".format(it) },
-        modifier = modifier
+        modifier = modifier,
+        valueText = { "%.0f".format(it) },
+        tickLabel = { v -> if (v.roundToInt() % 40 == 0) "%.0f".format(v) else "" },
     )
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Sub-dials — compact, needle-less, teal while in range
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Engine coolant, 40–130 °C. Blue below operating temperature. */
+@Composable
+fun CoolantGauge(tempC: Float, modifier: Modifier = Modifier, size: Dp = 124.dp) {
+    DialGauge(
+        value = tempC,
+        min = 40f,
+        max = 130f,
+        majorStep = 15f,
+        coolBelow = 80f,
+        cautionFrom = 105f,
+        redlineFrom = 115f,
+        label = "Coolant",
+        unit = "°C",
+        accent = IngweTeal,
+        compact = true,
+        size = size,
+        modifier = modifier,
+    )
+}
+
+/** Engine oil, 40–150 °C. Blue below operating temperature. */
+@Composable
+fun OilTempGauge(tempC: Float, modifier: Modifier = Modifier, size: Dp = 124.dp) {
+    DialGauge(
+        value = tempC,
+        min = 40f,
+        max = 150f,
+        majorStep = 22f,
+        coolBelow = 85f,
+        cautionFrom = 125f,
+        redlineFrom = 138f,
+        label = "Oil",
+        unit = "°C",
+        accent = IngweTeal,
+        compact = true,
+        size = size,
+        modifier = modifier,
+    )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Linear meter, panels, small building blocks
+ * ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * Sleek, curved compact arc meter for auxiliary vehicle signals (Coolant, Oil, Load, Battery).
+ * One telemetry row: label and value on one line, a thin bar underneath.
+ * The bar is teal (in range) until the value is below [coolBelow], at/above [cautionAt]
+ * or at/above [alertAt].
  */
 @Composable
-fun CompactArcMeter(
+fun LinearMeter(
     label: String,
     value: Float,
     unit: String,
     min: Float,
     max: Float,
     modifier: Modifier = Modifier,
-    normalMin: Float? = null,
-    normalMax: Float? = null,
-    warnMax: Float? = null,
-    dangerMax: Float? = null,
-    customColor: Color = IngwePrimary,
-    formatPattern: String = "%.0f"
+    cautionAt: Float? = null,
+    alertAt: Float? = null,
+    coolBelow: Float? = null,
+    format: String = "%.0f",
 ) {
-    val clampedValue = value.coerceIn(min, max)
-    val fraction = ((clampedValue - min) / (max - min)).coerceIn(0f, 1f)
-    val animatedFraction by animateFloatAsState(targetValue = fraction, label = "compact_arc")
+    val fraction = ((value - min) / (max - min)).coerceIn(0f, 1f)
+    val animated by animateFloatAsState(fraction, tween(220), label = "meter")
+    val color = statusColor(value, cautionAt, alertAt, coolBelow)
 
-    val stateColor = when {
-        dangerMax != null && value >= dangerMax -> IngweError
-        warnMax != null && value >= warnMax -> IngweWarning
-        normalMin != null && value < normalMin -> Color(0xFF00E5FF) // Cool/Cold
-        else -> customColor
-    }
-
-    Card(
-        modifier = modifier
-            .padding(4.dp)
-            .fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF13151A)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF262A33)),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text(label, style = LabelStyle, color = IngweTextSecondary, modifier = Modifier.weight(1f))
+            Text(format.format(value), style = ReadoutSmall, color = if (color == IngweTextPrimary) IngweTextPrimary else color)
+            Spacer(Modifier.width(3.dp))
+            Text(unit, style = LabelStyle, color = IngweTextTertiary)
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(IngweHairline),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = label,
-                    color = IngweOnSurface.copy(alpha = 0.65f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = formatPattern.format(value),
-                        color = stateColor,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Spacer(Modifier.width(2.dp))
-                    Text(
-                        text = unit,
-                        color = IngweOnSurface.copy(alpha = 0.5f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            // Graduated bar
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF1E222A))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(animatedFraction)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(stateColor.copy(alpha = 0.6f), stateColor)
-                            )
-                        )
-                )
-            }
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animated)
+                    .background(if (color == IngweTextPrimary) IngweTeal else color),
+            )
+        }
+    }
+}
 
-            Spacer(Modifier.height(3.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+private fun statusColor(value: Float, cautionAt: Float?, alertAt: Float?, coolBelow: Float?): Color = when {
+    alertAt != null && value >= alertAt -> IngweAlert
+    cautionAt != null && value >= cautionAt -> IngweCaution
+    coolBelow != null && value < coolBelow -> IngweCool
+    else -> IngweTextPrimary
+}
+
+/** Plain surface with an optional quiet title and trailing status. */
+@Composable
+fun Panel(
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(IngweSurface)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+    ) {
+        if (title != null || trailing != null) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (title != null) {
+                    Text(title, style = LabelStyle, color = IngweTextSecondary, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                trailing?.invoke()
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+        content()
+    }
+}
+
+/** Small "label over value" readout. */
+@Composable
+fun Stat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    unit: String? = null,
+    valueColor: Color = IngweTextPrimary,
+    large: Boolean = false,
+) {
+    Column(modifier) {
+        Text(label, style = LabelStyle, color = IngweTextSecondary)
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value, style = if (large) ReadoutLarge else ReadoutMedium, color = valueColor)
+            if (unit != null) {
+                Spacer(Modifier.width(4.dp))
                 Text(
-                    text = formatPattern.format(min),
-                    color = IngweOnSurface.copy(alpha = 0.35f),
-                    fontSize = 9.sp
-                )
-                Text(
-                    text = formatPattern.format(max),
-                    color = IngweOnSurface.copy(alpha = 0.35f),
-                    fontSize = 9.sp
+                    unit,
+                    style = LabelStyle,
+                    color = IngweTextTertiary,
+                    modifier = Modifier.padding(bottom = if (large) 8.dp else 3.dp),
                 )
             }
         }
     }
 }
 
-/**
- * Dedicated ZF 8HP Driveline Status Card:
- * Shows current gear (D1-D8, S1-S8, R), Torque Converter Lockup,
- * ATF Fluid Temperature, and Real Engine Output Torque (Nm).
- */
+/** Status text with a small leading dot — e.g. "Locked", "Slipping". */
 @Composable
-fun TransmissionDrivelineCard(
+fun StatusDot(text: String, color: Color, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(text, style = LabelStyle, color = IngweTextPrimary)
+    }
+}
+
+/** Compact segmented control (e.g. bar / psi). */
+@Composable
+fun <T> SegmentedControl(
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(IngweSurface)
+            .padding(2.dp),
+    ) {
+        options.forEach { (key, text) ->
+            val isSelected = key == selected
+            Text(
+                text = text,
+                style = LabelStyle,
+                color = if (isSelected) IngweTextPrimary else IngweTextTertiary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (isSelected) IngweSurfaceHigh else Color.Transparent)
+                    .clickable { onSelect(key) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Feature panels
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+enum class LockupState(val label: String) { LOCKED("Locked"), SLIP("Slipping"), OPEN("Open") }
+
+/** ZF 8HP: gear, converter lockup, output torque and ATF temperature. */
+@Composable
+fun TransmissionPanel(
     gear: String,
-    lockupState: String, // "LOCKED", "SLIP", "OPEN"
+    lockup: LockupState,
     atfTempC: Float,
     engineTorqueNm: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val atfColor = when {
-        atfTempC >= 115f -> IngweError
-        atfTempC >= 105f -> IngweWarning
-        atfTempC < 65f -> Color(0xFF00E5FF)
-        else -> IngweSecondary
-    }
-
-    val lockupColor = when (lockupState.uppercase()) {
-        "LOCKED" -> IngweSecondary
-        "SLIP" -> IngweWarning
-        else -> Color(0xFF00E5FF)
-    }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF13161F)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF262D3D)),
-        shape = RoundedCornerShape(12.dp)
+    Panel(
+        modifier = modifier,
+        title = "ZF 8HP transmission",
+        trailing = {
+            StatusDot(
+                text = "Converter ${lockup.label.lowercase()}",
+                color = when (lockup) {
+                    LockupState.LOCKED -> IngweTeal
+                    LockupState.SLIP -> IngweCaution
+                    LockupState.OPEN -> IngweCool
+                },
+            )
+        },
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "ZF 8HP DRIVELINE",
-                    color = IngweOnSurface.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Surface(
-                    color = lockupColor.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, lockupColor.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = "LOCKUP: $lockupState",
-                        color = lockupColor,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Gear & Torque Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Gear Display
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = "GEAR ",
-                        color = IngweOnSurface.copy(alpha = 0.5f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                    Text(
-                        text = gear,
-                        color = IngwePrimary,
-                        fontSize = 38.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Torque Display
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "OUTPUT TORQUE",
-                        color = IngweOnSurface.copy(alpha = 0.5f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = "%.0f".format(engineTorqueNm),
-                            color = IngweOnSurface,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Spacer(Modifier.width(2.dp))
-                        Text(
-                            text = "Nm",
-                            color = IngwePrimary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 3.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // ATF Temp Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "ATF FLUID TEMP",
-                    color = IngweOnSurface.copy(alpha = 0.6f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "%.0f °C".format(atfTempC),
-                    color = atfColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-            val atfFraction = ((atfTempC - 40f) / 100f).coerceIn(0f, 1f)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xFF1E2430))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(atfFraction)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(atfColor)
-                )
-            }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Stat("Gear", gear, large = true, valueColor = IngweAccent, modifier = Modifier.weight(1f))
+            Stat("Engine torque", "%.0f".format(engineTorqueNm), unit = "Nm", large = true)
         }
+        Spacer(Modifier.height(18.dp))
+        LinearMeter(
+            label = "ATF temperature",
+            value = atfTempC,
+            unit = "°C",
+            min = 40f,
+            max = 130f,
+            coolBelow = 65f,
+            cautionAt = 105f,
+            alertAt = 115f,
+        )
     }
 }
-
-/**
- * Dedicated 4Motion Off-Road Telemetry Card:
- * Steering Angle with left/right visual pointer, Pitch & Roll Inclinometers,
- * and 4-wheel slip detection.
- */
-@Composable
-fun OffRoadTelemetryCard(
-    steeringAngleDeg: Float,
-    pitchDeg: Float,
-    rollDeg: Float,
-    wheelSlipPct: Float,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF13161F)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF262D3D)),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "4MOTION OFF-ROAD DYNAMICS",
-                    color = IngweOnSurface.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Surface(
-                    color = Color(0xFF00E5FF).copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = "4WD ACTIVE",
-                        color = Color(0xFF00E5FF),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // 3 Columns: Steering Angle | Pitch | Roll
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Steering
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "STEERING",
-                        color = IngweOnSurface.copy(alpha = 0.5f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${if (steeringAngleDeg > 0) "R " else if (steeringAngleDeg < 0) "L " else ""}${abs(steeringAngleDeg).roundToInt()}°",
-                        color = Color(0xFF00E5FF),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Pitch
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "PITCH",
-                        color = IngweOnSurface.copy(alpha = 0.5f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${if (pitchDeg > 0) "▲ +" else if (pitchDeg < 0) "▼ " else ""}${abs(pitchDeg).roundToInt()}°",
-                        color = if (abs(pitchDeg) > 25f) IngweWarning else IngweOnSurface,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Roll
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "ROLL",
-                        color = IngweOnSurface.copy(alpha = 0.5f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${abs(rollDeg).roundToInt()}°",
-                        color = if (abs(rollDeg) > 20f) IngweError else IngweOnSurface,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // Wheel slip bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "TRACTION WHEEL SLIP",
-                    color = IngweOnSurface.copy(alpha = 0.6f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "%.1f %%".format(wheelSlipPct),
-                    color = if (wheelSlipPct > 15f) IngweWarning else IngweSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-            Spacer(Modifier.height(3.dp))
-            val slipFrac = (wheelSlipPct / 30f).coerceIn(0f, 1f)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xFF1E2430))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(slipFrac)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(if (wheelSlipPct > 15f) IngweWarning else IngweSecondary)
-                )
-            }
-        }
-    }
-}
-

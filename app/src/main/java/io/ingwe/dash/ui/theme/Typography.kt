@@ -7,42 +7,71 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Ingwe typography — large, readable at a glance from across a car interior.
- * Uses system fonts (no custom font files needed in M1).
- * M4 may add a monospaced display font for gauge numbers.
+ * Ingwe typography.
+ *
+ * Numbers use tabular figures ("tnum") so readouts don't jitter as digits change,
+ * and a light weight at large sizes — legible at a glance without shouting.
+ * Labels are small, sentence case, secondary colour.
  */
+private const val TABULAR = "tnum"
+
+/** Large live readout inside a dial or panel. */
+val ReadoutLarge = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Light,
+    fontSize = 44.sp,
+    letterSpacing = (-0.5).sp,
+    fontFeatureSettings = TABULAR,
+)
+
+/** Secondary numeric value in a panel row. */
+val ReadoutMedium = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Normal,
+    fontSize = 22.sp,
+    fontFeatureSettings = TABULAR,
+)
+
+/** Small numeric value (bars, list rows). */
+val ReadoutSmall = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Medium,
+    fontSize = 15.sp,
+    fontFeatureSettings = TABULAR,
+)
+
+/** Quiet label above / beside a value. */
+val LabelStyle = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = FontWeight.Medium,
+    fontSize = 12.sp,
+    letterSpacing = 0.2.sp,
+)
+
 val IngweTypography = Typography(
-    // Gauge value — huge, bold
-    displayLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Bold,
-        fontSize = 72.sp,
-        letterSpacing = (-1).sp,
-    ),
-    // Gauge label
-    displayMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 48.sp,
-    ),
-    // Section headers
+    displayLarge = ReadoutLarge,
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
+        fontWeight = FontWeight.Medium,
+        fontSize = 20.sp,
     ),
-    // Body text, DTC descriptions
+    titleMedium = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 15.sp,
+    ),
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 18.sp,
-        lineHeight = 26.sp,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
     ),
-    // Labels, units
-    labelSmall = TextStyle(
+    bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
-        letterSpacing = 0.5.sp,
+        lineHeight = 19.sp,
     ),
+    labelMedium = LabelStyle,
+    labelSmall = LabelStyle.copy(fontSize = 11.sp),
 )

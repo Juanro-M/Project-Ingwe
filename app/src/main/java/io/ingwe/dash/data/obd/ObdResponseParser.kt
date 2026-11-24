@@ -35,8 +35,16 @@ object ObdResponseParser {
                 if (payload.isEmpty()) return ObdResult.NoData("Empty response")
 
                 val serviceResponse = payload[0].toInt() and 0xFF
-                val serviceId = serviceResponse - 0x40 // response byte = request + 0x40
+                // UDS / OBD negative response: 7F <requested service> <NRC>
+                if (serviceResponse == 0x7F) {
+                    val nrc = payload.getOrNull(2)?.toInt()?.and(0xFF)
+                    return ObdResult.Error(
+                        if (nrc != null) "Negative response, NRC 0x%02X".format(nrc) else "Negative response"
+                    )
+                }
+                if (serviceResponse < 0x40) return ObdResult.Error("Not a response frame: 0x%02X".format(serviceResponse))
                 if (payload.size < 2) return ObdResult.Error("Response too short: ${payload.size} bytes")
+                val serviceId = serviceResponse - 0x40 // response byte = request + 0x40
                 val pid = payload[1].toInt() and 0xFF
                 val dataBytes = payload.drop(2).toByteArray()
                 ObdResult.Success(serviceId, pid, dataBytes)
@@ -44,28 +52,22 @@ object ObdResponseParser {
         }
     }
 
+    private val VARIABLE = Regex("[A-D]")
+
     /**
      * Apply a signal formula to raw data bytes.
      * Supported formula variables: A, B, C, D (bytes 0-3).
-     * Returns Double or null if bytes are insufficient.
-     *
-     * NOTE: Formulae come from the signals.json file. This evaluator handles
-     * the common patterns; complex formulae will be evaluated at M4.
+     * Returns null if the formula references a byte the response didn't contain,
+     * or if the formula is malformed — never a silently wrong value.
      */
     fun applyFormula(formula: String, bytes: ByteArray): Double? {
         if (bytes.isEmpty()) return null
-        val a = bytes.getOrNull(0)?.toInt()?.and(0xFF) ?: return null
-        val b = bytes.getOrNull(1)?.toInt()?.and(0xFF) ?: 0
-        val c = bytes.getOrNull(2)?.toInt()?.and(0xFF) ?: 0
-        val d = bytes.getOrNull(3)?.toInt()?.and(0xFF) ?: 0
-
         return try {
-            // Replace known variables and evaluate simple expressions
-            val expr = formula
-                .replace("A", a.toString())
-                .replace("B", b.toString())
-                .replace("C", c.toString())
-                .replace("D", d.toString())
+            val expr = VARIABLE.replace(formula) { match ->
+                val index = match.value[0] - 'A'
+                val byte = bytes.getOrNull(index) ?: throw IndexOutOfBoundsException("Missing byte ${match.value}")
+                (byte.toInt() and 0xFF).toString()
+            }
             SimpleExprEval.eval(expr)
         } catch (e: Exception) {
             null
