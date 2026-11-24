@@ -1,4 +1,4 @@
-# Project Ingwe
+# Project Ingwe 🐆
 
 **Glanceable OBD-II and UDS telemetry cluster for the Volkswagen Amarok 3.0 V6 TDI.**
 
