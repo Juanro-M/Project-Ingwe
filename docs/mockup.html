@@ -184,9 +184,9 @@
   #cv-v6 { height: 236px; }
   #cv-balance { height: 112px; margin-top: 8px; }
   #cv-glow { height: 92px; }
-  #cv-rail { height: 118px; }
-  #cv-egr { height: 140px; }
-  #cv-gearbox { height: 150px; }
+  #cv-rail { height: 78px; }
+  #cv-egr { height: 70px; }
+  #cv-gearbox { height: 72px; }
   .chassis { display: flex; align-items: center; gap: 8px; }
   .chassis .labels { height: 150px; padding: 30px 0 12px; display: flex; flex-direction: column; justify-content: space-between; font-size: 16px; color: var(--text-2); }
   .chassis .labels.left { text-align: right; }
@@ -1303,133 +1303,60 @@ function drawGlow(car) {
   txt(ctx, car.glowPhase === 'off' ? 'Plugs off' : `${car.glowPhase === 'pre' ? 'Pre-glow' : 'After-glow'} · ${Math.ceil(car.glowLeft)} s left`, 4, h - 1, { size: 11, color: C.text2 });
 }
 
-/* ── Common rail (mirrors CommonRailDiagram in the app) ─────────────────────
- * High-pressure pump (piston pulses with engine speed) feeding two rails — one per
- * bank — with three injectors each. Rail fill = pressure; injectors spray in firing order.
- */
-const FIRING = [0, 3, 1, 4, 2, 5]; // V6 TDI firing order 1-4-3-6-2-5 → indices
+/* ── Common rail: big number, one bar, target tick ──────────────────────── */
 function drawRail(car) {
   const { ctx, w, h } = prep(document.getElementById('cv-rail'));
-  const pressure = sweepTowards(spring('rail', car.rail, 2000), 2000), frac = Math.min(1, pressure / 2000);
-  const col = pressure >= 1800 ? C.caution : C.teal;
-  const t = performance.now() / 1000, rev = car.rpm / 60;                   // crank revs per second
-  const pumpX = 34, railL = 92, railR = w - 150, rows = [h * 0.3, h * 0.72];
-  // pump: cylinder with a piston bobbing at pump speed
-  ctx.strokeStyle = C.text2; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(pumpX - 16, h / 2 - 26, 32, 52, 6); ctx.stroke();
-  const stroke = (Math.sin(t * rev * Math.PI) + 1) / 2;
-  ctx.fillStyle = withAlpha(col, 0.85); ctx.fillRect(pumpX - 12, h / 2 - 22 + stroke * 18, 24, 8);
-  txt(ctx, 'pump', pumpX, h / 2 + 42, { size: 11, color: C.text3, align: 'center' });
-  rows.forEach((y, bank) => {
-    // feed line
-    ctx.strokeStyle = withAlpha(col, 0.3 + 0.6 * frac); ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(pumpX + 16, h / 2); ctx.lineTo(railL - 14, h / 2); ctx.lineTo(railL - 14, y); ctx.lineTo(railL, y); ctx.stroke();
-    // rail tube: hairline shell, filled to pressure intensity
-    ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.roundRect(railL, y - 7, railR - railL, 14, 7); ctx.fill();
-    const g = ctx.createLinearGradient(railL, 0, railR, 0);
-    g.addColorStop(0, withAlpha(col, 0.25 + 0.7 * frac)); g.addColorStop(1, withAlpha(col, 0.15 + 0.5 * frac));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(railL, y - 7, railR - railL, 14, 7); ctx.fill();
-    txt(ctx, `Bank ${bank + 1}`, railL, y - 12, { size: 11, color: C.text3 });
-    // injectors + spray in firing order
-    for (let k = 0; k < 3; k++) {
-      const x = railL + (railR - railL) * (k + 0.5) / 3, cyl = bank * 3 + k;
-      ctx.fillStyle = C.text2; ctx.fillRect(x - 3, y + 7, 6, 10);
-      const slot = FIRING.indexOf(cyl), cycle = (t * rev / 2 * 6) % 6;     // 6 injections per 2 revs
-      if (car.rpm > 50 && Math.abs(cycle - slot) < 0.6) {
-        ctx.fillStyle = withAlpha(col, 0.8); ctx.beginPath(); ctx.moveTo(x, y + 17); ctx.lineTo(x - 7, y + 30); ctx.lineTo(x + 7, y + 30); ctx.closePath(); ctx.fill();
-      }
-    }
-  });
-  txt(ctx, Math.round(pressure).toLocaleString('en-US'), w - 4, h / 2 - 2, { size: 30, weight: 300, color: C.text, align: 'right' });
-  txt(ctx, 'bar', w - 4, h / 2 + 18, { size: 12, color: C.text2, align: 'right' });
-  txt(ctx, `target ${Math.round(car.railTarget).toLocaleString('en-US')}`, w - 4, h / 2 + 36, { size: 12, color: C.teal, align: 'right' });
+  const MAX = 2000, p = sweepTowards(spring('rail', car.rail, MAX), MAX);
+  const col = p >= 1800 ? C.caution : C.teal;
+  txt(ctx, Math.round(p).toLocaleString('en-US'), 0, 34, { size: 32, weight: 300, color: C.text });
+  ctx.font = '300 33px system-ui, sans-serif';
+  const nw = ctx.measureText(Math.round(p).toLocaleString('en-US')).width;
+  txt(ctx, 'bar', nw + 6, 34, { size: 13, color: C.text2 });
+  txt(ctx, `target ${Math.round(car.railTarget).toLocaleString('en-US')}`, w, 34, { size: 13, color: C.text2, align: 'right' });
+  const y = 50, x = v => (Math.min(MAX, v) / MAX) * w;
+  ctx.fillStyle = C.hair; ctx.beginPath(); ctx.roundRect(0, y, w, 4, 2); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(0, y, x(p), 4, 2); ctx.fill();
+  ctx.fillStyle = C.text; ctx.fillRect(x(car.railTarget) - 1, y - 4, 2, 12);   // target tick
+  txt(ctx, '0', 0, y + 22, { size: 11, color: C.text3 });
+  txt(ctx, '2,000', w, y + 22, { size: 11, color: C.text3, align: 'right' });
 }
 
-/* ── EGR valve (mirrors EgrValveDiagram in the app) ─────────────────────────
- * Cross-section: hot exhaust below, fresh intake above, joined by a channel with a
- * poppet valve that lifts with the commanded opening; recirculated gas rises through it.
- */
+/* ── EGR: big %, butterfly-valve symbol that rotates open ───────────────── */
 function drawEgr(car) {
   const { ctx, w, h } = prep(document.getElementById('cv-egr'));
   const open = sweepTowards(spring('egr', car.egr, 100), 100) / 100;
-  const t = performance.now() / 1000;
-  const x0 = 110, x1 = w - 10, top = 4, bot = h - 4, pipeH = 20, cx = (x0 + x1) / 2, chW = 30;
-  const pipe = (y, col, label) => {
-    ctx.fillStyle = withAlpha(col, 0.16); ctx.beginPath(); ctx.roundRect(x0, y, x1 - x0, pipeH, 8); ctx.fill();
-    ctx.strokeStyle = withAlpha(col, 0.5); ctx.lineWidth = 1.2; ctx.stroke();
-    for (let i = 0; i < 4; i++) {                                           // flow chevrons
-      const x = x0 + 14 + ((t * 40 + i * (x1 - x0) / 4) % (x1 - x0 - 28));
-      ctx.strokeStyle = withAlpha(col, 0.7); ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(x - 3, y + 6); ctx.lineTo(x + 2, y + pipeH / 2); ctx.lineTo(x - 3, y + pipeH - 6); ctx.stroke();
-    }
-    txt(ctx, label, x1 - 6, y + pipeH / 2 + 4, { size: 11, color: C.text3, align: 'right' });
-  };
-  pipe(top, C.cool, 'intake');
-  pipe(bot - pipeH, C.alert, 'exhaust');
-  // channel
-  ctx.fillStyle = C.surfaceHigh; ctx.fillRect(cx - chW / 2, top + pipeH, chW, bot - pipeH - top - pipeH);
-  // valve seat + poppet (lifts upward when opening)
-  const seatY = bot - pipeH - 6, lift = open * 22;
-  ctx.strokeStyle = C.text2; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cx - chW / 2, seatY); ctx.lineTo(cx - 8, seatY); ctx.moveTo(cx + 8, seatY); ctx.lineTo(cx + chW / 2, seatY); ctx.stroke();
-  ctx.fillStyle = open > 0.02 ? C.accent : C.text3;
-  ctx.beginPath(); ctx.roundRect(cx - 10, seatY - 3 - lift, 20, 5, 2); ctx.fill();
-  ctx.fillRect(cx - 1.5, top + pipeH, 3, seatY - 3 - lift - top - pipeH);   // stem up to the actuator
-  // recirculated gas particles, count and speed scale with opening
-  const n = Math.round(open * 10);
-  for (let i = 0; i < n; i++) {
-    const p = ((t * (0.6 + open) + i / Math.max(1, n)) % 1);
-    const y = seatY - p * (seatY - top - pipeH), x = cx + Math.sin(i * 2.3 + t * 3) * 7;
-    ctx.fillStyle = withAlpha(p < 0.5 ? C.alert : C.caution, 0.85); ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
-  }
-  txt(ctx, `${Math.round(open * 100)}`, 0, h / 2 + 6, { size: 34, weight: 300, color: C.text });
-  txt(ctx, '% open', 0, h / 2 + 26, { size: 12, color: C.text2 });
-  txt(ctx, open < 0.03 ? 'closed · full power' : open > 0.3 ? 'recirculating' : 'trickle', 0, h / 2 + 44, { size: 12, color: C.text3 });
+  const cx = w - 36, cy = h / 2, r = 26;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.strokeStyle = C.hair; ctx.lineWidth = 2; ctx.stroke();
+  // the disc: horizontal = closed, vertical = fully open
+  const a = open * Math.PI / 2;
+  ctx.strokeStyle = open > 0.02 ? C.accent : C.text3; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * (r - 6), cy - Math.sin(a) * (r - 6)); ctx.lineTo(cx + Math.cos(a) * (r - 6), cy + Math.sin(a) * (r - 6)); ctx.stroke();
+  ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
+  txt(ctx, `${Math.round(open * 100)}`, 0, cy + 6, { size: 32, weight: 300, color: C.text });
+  ctx.font = '300 33px system-ui, sans-serif';
+  const nw = ctx.measureText(`${Math.round(open * 100)}`).width;
+  txt(ctx, '% open', nw + 6, cy + 6, { size: 13, color: C.text2 });
+  txt(ctx, open < 0.03 ? 'Closed' : open > 0.3 ? 'Recirculating exhaust' : 'Slightly open', 0, cy + 28, { size: 13, color: C.text3 });
 }
 
-/* ── Gearbox (mirrors GearboxPanel in the app) ──────────────────────────────
- * ZF 8HP gear ladder with ratios, plus the torque converter: engine-side pump and
- * gearbox-side turbine spinning at their real relative speeds, a lock-up clutch
- * bridge when locked, and the slip in rpm.
- */
-const ZF_RATIOS = [4.71, 3.14, 2.11, 1.67, 1.29, 1.0, 0.84, 0.67];
-let pumpAngle = 0, turbineAngle = 0, lastGbT = performance.now();
+/* ── Gearbox: gear row + one status line ────────────────────────────────── */
 function drawGearbox(car) {
   const { ctx, w, h } = prep(document.getElementById('cv-gearbox'));
-  const now = performance.now(), dt = Math.min(0.05, (now - lastGbT) / 1000); lastGbT = now;
   const mode = car.gear ? car.gear[0] : 'P', num = car.gear ? parseInt(car.gear.slice(1)) || 0 : 0;
-  // ladder
   const cells = ['P', 'R', 'N', 'D', '1', '2', '3', '4', '5', '6', '7', '8'];
-  const cw = Math.min(40, (w - 30) / cells.length), y0 = 4;
+  const cw = Math.min(42, (w - 14) / cells.length);
   cells.forEach((c, i) => {
     const x = i * cw + (i > 3 ? 14 : 0);
     const lit = (i < 4 && c === mode) || (i >= 4 && Number(c) === num);
-    ctx.fillStyle = lit ? (i < 4 ? C.surfaceHigh : (car.slip ? C.caution : C.accent)) : 'transparent';
-    ctx.beginPath(); ctx.roundRect(x + 2, y0, cw - 4, 30, 6); ctx.fill();
-    txt(ctx, c, x + cw / 2, y0 + 20, { size: 15, weight: lit ? 600 : 500, color: lit ? (i < 4 ? C.text : css('--on-accent')) : C.text3, align: 'center' });
-    if (i >= 4) txt(ctx, ZF_RATIOS[i - 4].toFixed(2), x + cw / 2, y0 + 46, { size: 10, color: lit ? C.text2 : C.text3, align: 'center' });
+    if (lit) {
+      ctx.fillStyle = i < 4 ? C.surfaceHigh : (car.slip ? C.caution : C.accent);
+      ctx.beginPath(); ctx.roundRect(x + 2, 2, cw - 4, 32, 7); ctx.fill();
+    }
+    txt(ctx, c, x + cw / 2, 24, { size: 16, weight: lit ? 600 : 500, color: lit ? (i < 4 ? C.text : css('--on-accent')) : C.text3, align: 'center' });
   });
-  // torque converter
-  const locked = !car.slip, engine = car.rpm, turbine = locked ? engine : engine * 0.9, slipRpm = engine - turbine;
-  pumpAngle += dt * engine / 60 * Math.PI * 2 * 0.05; turbineAngle += dt * turbine / 60 * Math.PI * 2 * 0.05; // slowed ×20 to be visible
-  const cy = h - 44, r = 30, px = 50, tx = 50 + r * 2 + 26;
-  const rotor = (x, a, col, label) => {
-    ctx.beginPath(); ctx.arc(x, cy, r, 0, Math.PI * 2); ctx.fillStyle = css('--surface'); ctx.fill(); ctx.strokeStyle = C.hair; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.save(); ctx.translate(x, cy); ctx.rotate(a); ctx.strokeStyle = col; ctx.lineWidth = 2;
-    for (let k = 0; k < 8; k++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(6, 0); ctx.quadraticCurveTo(r * 0.6, 6, r - 4, 0); ctx.stroke(); }
-    ctx.restore();
-    txt(ctx, label, x, cy + r + 14, { size: 11, color: C.text3, align: 'center' });
-  };
-  rotor(px, pumpAngle, C.text2, 'engine');
-  rotor(tx, turbineAngle, locked ? C.teal : C.caution, 'gearbox');
-  // lock-up clutch bridge
-  ctx.fillStyle = locked ? C.teal : withAlpha(C.caution, 0.35);
-  ctx.beginPath(); ctx.roundRect(px + r - 2, cy - 4, tx - px - 2 * r + 4, 8, 4); ctx.fill();
-  if (!locked) { ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = C.caution; ctx.lineWidth = 1.5; ctx.strokeRect(px + r, cy - 4, tx - px - 2 * r, 8); ctx.restore(); }
-  // readouts
-  const ratio = num ? ZF_RATIOS[num - 1] : null, rx = tx + r + 30;
-  txt(ctx, locked ? 'Converter locked' : 'Converter slipping', rx, cy - 18, { size: 14, weight: 500, color: locked ? C.teal : C.caution });
-  txt(ctx, `${Math.round(slipRpm)} rpm slip`, rx, cy + 2, { size: 13, color: C.text2 });
-  if (ratio) txt(ctx, `ratio ${ratio.toFixed(2)} · output ${Math.round(turbine / ratio).toLocaleString('en-US')} rpm`, rx, cy + 22, { size: 13, color: C.text2 });
+  const locked = !car.slip;
+  ctx.fillStyle = locked ? C.teal : C.caution; ctx.beginPath(); ctx.arc(4, 58, 4, 0, Math.PI * 2); ctx.fill();
+  txt(ctx, locked ? 'Torque converter locked' : `Torque converter slipping · ${Math.round(car.rpm * 0.1)} rpm`, 16, 63, { size: 14, color: C.text });
 }
 
 /* ── Needle physics ─────────────────────────────────────────────────────────
