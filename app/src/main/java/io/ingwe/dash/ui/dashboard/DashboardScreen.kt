@@ -35,6 +35,8 @@ import io.ingwe.dash.ui.navigation.Screen
 import io.ingwe.dash.ui.pages.AirPage
 import io.ingwe.dash.ui.pages.EconomyPage
 import io.ingwe.dash.ui.pages.EnginePage
+import io.ingwe.dash.ui.pages.GearboxRow
+import io.ingwe.dash.ui.pages.SourceTag
 import io.ingwe.dash.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -309,11 +311,8 @@ private fun DrivelineBody(car: VehicleState) {
                 engineTorqueNm = car.torqueNm,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Panel(Modifier.fillMaxWidth(), title = "Engine temperatures") {
-                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                    LinearMeter("Coolant", car.coolantC, "°C", 50f, 130f, Modifier.weight(1f), coolBelow = 80f, cautionAt = 105f, alertAt = 115f)
-                    LinearMeter("Oil", car.oilC, "°C", 50f, 150f, Modifier.weight(1f), coolBelow = 85f, cautionAt = 125f, alertAt = 138f)
-                }
+            Panel(Modifier.fillMaxWidth(), title = "Gearbox", trailing = { SourceTag("VW UDS · unconfirmed") }) {
+                GearboxRow(car.gear, car.lockup)
             }
         }
     }

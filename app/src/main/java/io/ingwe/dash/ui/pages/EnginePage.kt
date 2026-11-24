@@ -34,7 +34,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import io.ingwe.dash.data.vehicle.GlowPhase
 import io.ingwe.dash.data.vehicle.VehicleState
-import io.ingwe.dash.ui.components.gauges.LinearMeter
 import io.ingwe.dash.ui.components.gauges.NeedleSpring
 import io.ingwe.dash.ui.components.gauges.Panel
 import io.ingwe.dash.ui.components.gauges.StatusDot
@@ -75,11 +74,11 @@ fun EnginePage(car: VehicleState) {
             ) {
                 GlowCard(car)
             }
-            Panel(Modifier.fillMaxWidth(), title = "Fuel rail", trailing = { SourceTag("OBD-II") }) {
-                LinearMeter("Rail pressure", car.railBar, "bar", 0f, 2000f, cautionAt = 1800f)
+            Panel(Modifier.fillMaxWidth(), title = "Common rail", trailing = { SourceTag("OBD-II") }) {
+                RailReadout(car.railBar, car.railTargetBar)
             }
             Panel(Modifier.fillMaxWidth(), title = "EGR valve", trailing = { SourceTag("OBD-II") }) {
-                LinearMeter("Commanded position", car.egrPct, "%", 0f, 100f)
+                EgrReadout(car.egrPct)
             }
         }
     }

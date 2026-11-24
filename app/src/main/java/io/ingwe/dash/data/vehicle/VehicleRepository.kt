@@ -153,7 +153,7 @@ class VehicleRepository(
             gear = d.gear, lockup = d.lockup, atfTempC = d.atfTempC,
             steeringDeg = d.steeringDeg, pitchDeg = d.pitchDeg, rollDeg = d.rollDeg,
             wheelSlip = d.wheelSlip, rearDiff = d.rearDiff, rearTorquePct = d.rearTorquePct,
-            mafExpectedGs = d.mafExpectedGs, injectorCorrections = d.injectorCorrections,
+            mafExpectedGs = d.mafExpectedGs, railTargetBar = d.railTargetBar, injectorCorrections = d.injectorCorrections,
             glowOhms = d.glowOhms, glowPhase = d.glowPhase, glowSecondsLeft = d.glowSecondsLeft,
         )
     }

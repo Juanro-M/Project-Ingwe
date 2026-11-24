@@ -14,8 +14,8 @@ android {
         // Head units often report a spoofed Android version; many UIS8581A units really run Android 9/10.
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0-M1"
+        versionCode = 5
+        versionName = "0.4.1-M1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
