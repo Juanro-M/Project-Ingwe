@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ingwe mark: a 270° dial (centre 54,54, r 24) with the live arc in amber,
+  redline in red, a slim needle at ~72 % and a teal hub.
+  108×108 viewport = adaptive-icon canvas; everything sits inside the 66dp safe zone.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Track -->
+    <path
+        android:pathData="M37.03,70.97 A24,24 0 1,1 70.97,70.97"
+        android:strokeColor="#33EDEDEF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Redline -->
+    <path
+        android:pathData="M77.93,55.88 A24,24 0 0,1 70.97,70.97"
+        android:strokeColor="#FF5A4F"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Live arc -->
+    <path
+        android:pathData="M37.03,70.97 A24,24 0 1,1 74.66,41.79"
+        android:strokeColor="#FFA43A"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Needle -->
+    <path
+        android:pathData="M49.70,56.55 L71.22,43.82"
+        android:strokeColor="#EDEDEF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Hub -->
+    <path
+        android:pathData="M48.5,54 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0 Z"
+        android:fillColor="#1C1C1F" />
+    <path
+        android:pathData="M51.5,54 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z"
+        android:fillColor="#3CCFB8" />
+</vector>

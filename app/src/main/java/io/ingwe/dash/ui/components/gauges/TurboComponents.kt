@@ -6,7 +6,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -35,11 +37,13 @@ private const val VANE_TRAVEL_DEG = 58f
  */
 @Composable
 fun VgtVaneGauge(positionPct: Float, modifier: Modifier = Modifier, size: Dp = 124.dp) {
-    val fraction by animateFloatAsState((positionPct / 100f).coerceIn(0f, 1f), tween(220), label = "vgt")
+    val animatedPct = animateFloatAsState(positionPct, NeedleSpring, label = "vgt")
+    val sweep = LocalIgnitionSweep.current
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize().padding(bottom = 14.dp)) {
             val r = this.size.minDimension / 2f // `size` alone would be the Dp parameter
+            val fraction = sweepTowards((animatedPct.value / 100f).coerceIn(0f, 1f), 1f, sweep.value)
             val c = center
 
             // Housing ring + percentage ring
@@ -56,19 +60,19 @@ fun VgtVaneGauge(positionPct: Float, modifier: Modifier = Modifier, size: Dp = 1
             )
 
             // Turbine wheel: hub with swept blades
-            drawCircle(IngweSurfaceHigh, r * 0.46f, c)
+            drawCircle(IngweSurfaceHigh, r * 0.52f, c)
             for (i in 0 until 12) {
                 val a = Math.toRadians(i * 30.0)
                 val b = Math.toRadians(i * 30.0 + 22.0)
                 drawLine(
                     IngweTextTertiary,
-                    Offset(c.x + r * 0.34f * cos(a).toFloat(), c.y + r * 0.34f * sin(a).toFloat()),
-                    Offset(c.x + r * 0.45f * cos(b).toFloat(), c.y + r * 0.45f * sin(b).toFloat()),
+                    Offset(c.x + r * 0.42f * cos(a).toFloat(), c.y + r * 0.42f * sin(a).toFloat()),
+                    Offset(c.x + r * 0.51f * cos(b).toFloat(), c.y + r * 0.51f * sin(b).toFloat()),
                     r * 0.03f,
                     StrokeCap.Round,
                 )
             }
-            drawCircle(IngweBackground, r * 0.33f, c)
+            drawCircle(IngweBackground, r * 0.40f, c)
 
             // Guide vanes: pivot on a ring, rotate from tangential (closed) towards radial (open)
             val pivotR = r * 0.66f
@@ -93,16 +97,17 @@ fun VgtVaneGauge(positionPct: Float, modifier: Modifier = Modifier, size: Dp = 1
             }
         }
 
-        // Readout in the turbine eye
-        Row(
-            Modifier.align(Alignment.Center).padding(bottom = 14.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text("${positionPct.roundToInt()}", style = ReadoutSmall.copy(fontSize = (size.value * 0.13f).sp), color = IngweTextPrimary)
-            Text("%", style = LabelStyle.copy(fontSize = 10.sp), color = IngweTextTertiary, modifier = Modifier.padding(bottom = 2.dp))
-        }
+        // Readout: the number alone, exactly centred in the turbine eye; the unit lives in the label.
+        // Reads the same spring as the vanes so it counts with them.
+        val text by remember(animatedPct) { derivedStateOf { animatedPct.value.roundToInt().coerceIn(0, 100).toString() } }
         Text(
-            "VGT vane",
+            text = text,
+            style = ReadoutSmall.copy(fontSize = (size.value * 0.16f).sp, lineHeight = (size.value * 0.16f).sp),
+            color = IngweTextPrimary,
+            modifier = Modifier.align(Alignment.Center).padding(bottom = 14.dp),
+        )
+        Text(
+            "VGT vane %",
             style = LabelStyle,
             color = IngweTextSecondary,
             modifier = Modifier.align(Alignment.BottomCenter),

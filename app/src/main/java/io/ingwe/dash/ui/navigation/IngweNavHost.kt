@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import io.ingwe.dash.ui.components.IgnitionIntro
 import io.ingwe.dash.ui.dashboard.DashboardScreen
 import io.ingwe.dash.ui.dtc.DtcScreen
 import io.ingwe.dash.ui.dtc.FaultStore
@@ -24,18 +25,20 @@ fun IngweNavHost(
     // Shared across screens so the dashboard banner reflects codes cleared on the fault screen.
     val faultStore = remember { FaultStore() }
 
-    NavHost(
-        navController = navController,
-        startDestination = Screen.Dashboard.route,
-    ) {
-        composable(Screen.Dashboard.route) {
-            DashboardScreen(navController = navController, faultStore = faultStore)
-        }
-        composable(Screen.Terminal.route) {
-            TerminalScreen(navController = navController)
-        }
-        composable(Screen.Dtc.route) {
-            DtcScreen(navController = navController, faultStore = faultStore)
+    IgnitionIntro {
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Dashboard.route,
+        ) {
+            composable(Screen.Dashboard.route) {
+                DashboardScreen(navController = navController, faultStore = faultStore)
+            }
+            composable(Screen.Terminal.route) {
+                TerminalScreen(navController = navController)
+            }
+            composable(Screen.Dtc.route) {
+                DtcScreen(navController = navController, faultStore = faultStore)
+            }
         }
     }
 }

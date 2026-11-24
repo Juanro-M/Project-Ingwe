@@ -1,9 +1,14 @@
 package io.ingwe.dash.ui.dashboard
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -23,6 +28,7 @@ import io.ingwe.dash.ui.components.gauges.*
 import io.ingwe.dash.ui.dtc.FaultStore
 import io.ingwe.dash.ui.navigation.Screen
 import io.ingwe.dash.ui.theme.*
+import kotlinx.coroutines.launch
 
 private enum class ClusterView(val label: String) {
     CLUSTER("Cluster"),
@@ -35,17 +41,33 @@ private enum class ClusterView(val label: String) {
  *
  * Views:
  *   Cluster   — tacho, boost, speed; VGT / coolant / oil sub-dials; EGT, charge air, torque, battery
- *   Driveline — boost; ZF 8HP gear, lockup, ATF; coolant & oil
- *   Off-road  — boost; 4Motion steering / pitch / roll visuals, per-wheel slip, diff state, torque split
+ *   Driveline — tacho with gear in the hub; ZF 8HP load, torque, lockup, ATF; coolant & oil
+ *   Off-road  — roll and pitch clinometers; 4Motion steering, per-wheel slip, diff state, torque split
+ *
+ * Swipe left/right (or tap the tabs) to move between pages.
  *
  * M1: values come from [SimulatedVehicle], driven by the demo throttle.
  */
 @Composable
 fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
     var boostUnit by rememberSaveable { mutableStateOf(BoostUnit.BAR) }
-    var view by rememberSaveable { mutableStateOf(ClusterView.CLUSTER) }
+    // Swipe left/right between the three pages; the tabs follow and also drive it.
+    val pager = rememberPagerState(pageCount = { ClusterView.entries.size })
+    val view = ClusterView.entries[pager.currentPage]
+    val scope = rememberCoroutineScope()
     var throttle by rememberSaveable { mutableFloatStateOf(0.55f) }
     var showDemoControls by rememberSaveable { mutableStateOf(false) }
+    var autoSweep by remember { mutableStateOf(false) }
+
+    // Stress test: drive the throttle idle ↔ full continuously so every gauge moves every frame.
+    LaunchedEffect(autoSweep, showDemoControls) {
+        if (!autoSweep || !showDemoControls) return@LaunchedEffect
+        val a = Animatable(throttle)
+        while (true) {
+            a.animateTo(1f, tween(1600, easing = FastOutSlowInEasing)) { throttle = value }
+            a.animateTo(0f, tween(1600, easing = FastOutSlowInEasing)) { throttle = value }
+        }
+    }
 
     val car = remember(throttle) { SimulatedVehicle.at(throttle) }
 
@@ -72,7 +94,7 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
                 StatusDot(text = "Demo data · ECU 7E0", color = IngweCaution)
             }
 
-            ViewTabs(selected = view, onSelect = { view = it })
+            ViewTabs(selected = view, onSelect = { scope.launch { pager.animateScrollToPage(it.ordinal) } })
 
             Row(
                 Modifier.weight(1f),
@@ -131,15 +153,28 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
 
         // ── Demo throttle ────────────────────────────────────────────────────
         AnimatedVisibility(visible = showDemoControls) {
-            DemoControls(throttle = throttle, onThrottle = { throttle = it })
+            DemoControls(
+                throttle = throttle,
+                onThrottle = { autoSweep = false; throttle = it },
+                autoSweep = autoSweep,
+                onAutoSweep = { autoSweep = it },
+            )
         }
 
         // ── Body ─────────────────────────────────────────────────────────────
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            when (view) {
-                ClusterView.CLUSTER -> ClusterBody(car, boostUnit, peakBoostKPa)
-                ClusterView.DRIVELINE -> DrivelineBody(car, boostUnit, peakBoostKPa)
-                ClusterView.OFFROAD -> OffRoadBody(car, boostUnit, peakBoostKPa)
+        // Only the visible page is composed (plus its neighbour mid-swipe), so hidden
+        // pages cost nothing.
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            pageSpacing = 24.dp,
+        ) { page ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                when (ClusterView.entries[page]) {
+                    ClusterView.CLUSTER -> ClusterBody(car, boostUnit, peakBoostKPa)
+                    ClusterView.DRIVELINE -> DrivelineBody(car)
+                    ClusterView.OFFROAD -> OffRoadBody(car)
+                }
             }
         }
 
@@ -163,7 +198,7 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
             Spacer(Modifier.weight(1f))
-            FooterStat("Polling", "10.4 Hz")
+            if (showDemoControls) FrameRateStat() else FooterStat("Polling", "10.4 Hz")
         }
     }
 }
@@ -181,7 +216,7 @@ private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TachometerGauge(rpm = car.rpm, size = 224.dp)
-            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 256.dp)
+            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 256.dp, targetKPa = car.targetBoostKPa)
             SpeedometerGauge(speedKmH = car.speedKmH, size = 224.dp)
         }
         Row(
@@ -199,7 +234,7 @@ private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) 
                 OilTempGauge(tempC = car.oilC)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                LinearMeter("Engine torque", car.torqueNm, "Nm", 0f, 650f, cautionAt = 580f)
+                LinearMeter("Engine torque", car.torqueNm, "Nm", 0f, 700f, cautionAt = 620f)
                 LinearMeter("Battery", car.batteryV, "V", 10f, 16f, coolBelow = 12.4f, format = "%.1f")
             }
         }
@@ -207,18 +242,24 @@ private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) 
 }
 
 @Composable
-private fun DrivelineBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) {
+private fun DrivelineBody(car: SimulatedVehicle) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(32.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Sport-style tacho: rpm with the current gear in the hub (amber; caution when the converter slips)
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 290.dp)
+            TachometerGauge(
+                rpm = car.rpm,
+                size = 330.dp,
+                gear = car.gear,
+                gearColor = if (car.lockup == LockupState.SLIP) IngweCaution else IngweAccent,
+            )
         }
         Column(Modifier.weight(1.25f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             TransmissionPanel(
-                gear = car.gear,
+                engineLoadPct = car.engineLoadPct,
                 lockup = car.lockup,
                 atfTempC = car.atfTempC,
                 engineTorqueNm = car.torqueNm,
@@ -235,23 +276,22 @@ private fun DrivelineBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float
 }
 
 @Composable
-private fun OffRoadBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) {
+private fun OffRoadBody(car: SimulatedVehicle) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(32.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 264.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Clinometer(ClinometerKind.ROLL, car.rollDeg, Modifier.fillMaxWidth())
+            Clinometer(ClinometerKind.PITCH, car.pitchDeg, Modifier.fillMaxWidth())
         }
         OffRoadPanel(
             steeringAngleDeg = car.steeringDeg,
-            pitchDeg = car.pitchDeg,
-            rollDeg = car.rollDeg,
             wheelSlip = car.wheelSlip,
             rearDiff = car.rearDiff,
             rearTorquePct = car.rearTorquePct,
-            modifier = Modifier.weight(1.7f),
+            modifier = Modifier.weight(1.35f),
         )
     }
 }
@@ -312,8 +352,59 @@ private fun FooterStat(label: String, value: String) {
     }
 }
 
+/**
+ * Live frame rate and worst frame time over the last second. Only shown in demo
+ * mode: measuring keeps the frame clock ticking, which costs a little power.
+ */
 @Composable
-private fun DemoControls(throttle: Float, onThrottle: (Float) -> Unit) {
+private fun FrameRateStat() {
+    var fps by remember { mutableIntStateOf(0) }
+    var worstMs by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        var last = 0L
+        var windowStart = 0L
+        var frames = 0
+        var worstNs = 0L
+        while (true) {
+            withFrameNanos { now ->
+                if (last != 0L) {
+                    frames++
+                    worstNs = maxOf(worstNs, now - last)
+                }
+                last = now
+                if (windowStart == 0L) windowStart = now
+                if (now - windowStart >= 1_000_000_000L) {
+                    fps = frames
+                    worstMs = (worstNs / 1_000_000L).toInt()
+                    frames = 0
+                    worstNs = 0L
+                    windowStart = now
+                }
+            }
+        }
+    }
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text("Frame rate", style = LabelStyle, color = IngweTextTertiary)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$fps fps · worst $worstMs ms",
+            style = ReadoutSmall.copy(fontSize = 13.sp),
+            color = when {
+                fps >= 50 -> IngweTeal
+                fps >= 30 -> IngweCaution
+                else -> IngweAlert
+            },
+        )
+    }
+}
+
+@Composable
+private fun DemoControls(
+    throttle: Float,
+    onThrottle: (Float) -> Unit,
+    autoSweep: Boolean,
+    onAutoSweep: (Boolean) -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -345,8 +436,14 @@ private fun DemoControls(throttle: Float, onThrottle: (Float) -> Unit) {
         Spacer(Modifier.width(16.dp))
         SegmentedControl(
             options = listOf(0.05f to "Idle", 0.40f to "Cruise", 0.75f to "Boost", 1.0f to "Full"),
-            selected = listOf(0.05f, 0.40f, 0.75f, 1.0f).firstOrNull { kotlin.math.abs(it - throttle) < 0.02f } ?: -1f,
+            selected = if (autoSweep) -1f else listOf(0.05f, 0.40f, 0.75f, 1.0f).firstOrNull { kotlin.math.abs(it - throttle) < 0.02f } ?: -1f,
             onSelect = onThrottle,
+        )
+        Spacer(Modifier.width(8.dp))
+        SegmentedControl(
+            options = listOf(true to "Sweep"),
+            selected = autoSweep,
+            onSelect = { onAutoSweep(!autoSweep) },
         )
     }
 }
@@ -359,6 +456,8 @@ private fun DemoControls(throttle: Float, onThrottle: (Float) -> Unit) {
 internal data class SimulatedVehicle(
     val rpm: Float,
     val boostKPa: Float,
+    val targetBoostKPa: Float,
+    val engineLoadPct: Float,
     val speedKmH: Float,
     val coolantC: Float,
     val oilC: Float,
@@ -393,6 +492,8 @@ internal data class SimulatedVehicle(
             return SimulatedVehicle(
                 rpm = 800f + t * 3500f,
                 boostKPa = 95f + t * 165f,
+                targetBoostKPa = 100f + t * 170f, // ECU request runs slightly ahead of actual
+                engineLoadPct = (15f + t * 75f).coerceAtMost(100f),
                 speedKmH = speed,
                 coolantC = 88f + t * 8f,
                 oilC = 92f + t * 14f,

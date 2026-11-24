@@ -19,7 +19,7 @@ private const val TABULAR = "tnum"
 val ReadoutLarge = TextStyle(
     fontFamily = FontFamily.Default,
     fontWeight = FontWeight.Light,
-    fontSize = 44.sp,
+    fontSize = 48.sp,
     letterSpacing = (-0.5).sp,
     fontFeatureSettings = TABULAR,
 )
@@ -28,7 +28,7 @@ val ReadoutLarge = TextStyle(
 val ReadoutMedium = TextStyle(
     fontFamily = FontFamily.Default,
     fontWeight = FontWeight.Normal,
-    fontSize = 22.sp,
+    fontSize = 24.sp,
     fontFeatureSettings = TABULAR,
 )
 
@@ -36,7 +36,7 @@ val ReadoutMedium = TextStyle(
 val ReadoutSmall = TextStyle(
     fontFamily = FontFamily.Default,
     fontWeight = FontWeight.Medium,
-    fontSize = 15.sp,
+    fontSize = 17.sp,
     fontFeatureSettings = TABULAR,
 )
 
@@ -44,7 +44,7 @@ val ReadoutSmall = TextStyle(
 val LabelStyle = TextStyle(
     fontFamily = FontFamily.Default,
     fontWeight = FontWeight.Medium,
-    fontSize = 12.sp,
+    fontSize = 13.sp,
     letterSpacing = 0.2.sp,
 )
 
@@ -58,7 +58,7 @@ val IngweTypography = Typography(
     titleMedium = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Medium,
-        fontSize = 15.sp,
+        fontSize = 16.sp,
     ),
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
@@ -73,5 +73,5 @@ val IngweTypography = Typography(
         lineHeight = 19.sp,
     ),
     labelMedium = LabelStyle,
-    labelSmall = LabelStyle.copy(fontSize = 11.sp),
+    labelSmall = LabelStyle.copy(fontSize = 12.sp),
 )

@@ -23,7 +23,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: #050506; }
   body {
-    font: 500 12px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 500 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     padding: 24px 16px;
@@ -41,8 +41,18 @@
     padding: 14px 24px;
     display: flex; flex-direction: column;
     overflow: hidden;
+    position: relative;
   }
-  .caption { max-width: 1280px; margin: 12px auto 0; color: var(--text-3); font-size: 12px; }
+  .caption { max-width: 1280px; margin: 12px auto 0; color: var(--text-3); font-size: 12px; display: flex; align-items: center; gap: 12px; }
+  .caption .grow { flex: 1; }
+  .caption button { color: var(--text-2); background: var(--surface); padding: 6px 10px; border-radius: 8px; }
+  .caption img, .caption svg { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+
+  /* Ignition intro (mirrors IgnitionIntro in Intro.kt) */
+  .intro { position: absolute; inset: 0; background: var(--bg); display: grid; place-items: center; z-index: 10; cursor: pointer; }
+  .intro[hidden] { display: none; }
+  .intro .logo { width: 168px; height: 168px; grid-area: 1 / 1; }
+  .intro .word { grid-area: 1 / 1; transform: translateY(76px); color: var(--text-2); font-size: 15px; letter-spacing: 6px; }
 
   /* Header */
   header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
@@ -87,10 +97,12 @@
   .dials { display: flex; justify-content: space-evenly; align-items: center; }
   .dial { position: relative; }
   .dial canvas { display: block; }
-  .dial .readout { position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; pointer-events: none; }
+  .dial .readout { position: absolute; left: 0; right: 0; bottom: 1%; text-align: center; pointer-events: none; }
   .dial .value { font-weight: 300; letter-spacing: -0.5px; line-height: 1.1; }
   .dial .value.alert { color: var(--alert); }
   .dial .label { color: var(--text-2); }
+  .dial .sub { color: var(--teal); margin-left: 8px; }
+  .dial .gear { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-size: 40px; font-weight: 400; color: var(--accent); pointer-events: none; line-height: 1; letter-spacing: -0.5px; }
 
   .subrow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 32px; align-items: center; }
   .subrow .col { display: flex; flex-direction: column; gap: 18px; }
@@ -98,7 +110,7 @@
   .dial.vgt { width: 124px; height: 124px; }
   .dial.compact .readout { top: 50%; bottom: auto; transform: translateY(-38%); }
   .dial.compact .name { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; color: var(--text-2); }
-  .vgt-eye { position: absolute; left: 0; right: 0; top: calc(50% - 7px); transform: translateY(-50%); text-align: center; font-size: 16px; }
+  .vgt-eye { position: absolute; left: 0; right: 0; top: 55px; transform: translateY(-50%); text-align: center; font-size: 20px; line-height: 1; letter-spacing: -0.3px; }
   .vgt-eye small { color: var(--text-3); font-size: 10px; margin-left: 1px; }
 
   /* 4Motion */
@@ -106,11 +118,20 @@
   .angle { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
   .angle .k { color: var(--text-2); }
   .angle canvas { display: block; width: 100%; height: 78px; margin: 4px 0; }
-  .angle .v { font-size: 22px; }
+  .angle .v { font-size: 24px; }
   .angle .u { color: var(--text-3); margin-left: 6px; }
   .drivetrain { display: flex; align-items: center; gap: 24px; margin-top: 14px; }
+  .steer-tile { width: 172px; flex: none; align-self: stretch; display: flex; flex-direction: column; }
+  .steer-tile canvas { flex: 1; height: auto; min-height: 90px; }
+  .clinos { display: flex; flex-direction: column; gap: 12px; }
+  .clino { background: var(--surface); border-radius: 14px; padding: 14px 18px 8px; }
+  .clino-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .clino-head .k { color: var(--text-2); }
+  .clino-head .v { font-size: 24px; }
+  .clino-head .u { color: var(--text-3); margin-left: 6px; }
+  .clino canvas { display: block; width: 100%; height: 168px; }
   .chassis { display: flex; align-items: center; gap: 8px; }
-  .chassis .labels { height: 150px; padding: 30px 0 12px; display: flex; flex-direction: column; justify-content: space-between; font-size: 15px; color: var(--text-2); }
+  .chassis .labels { height: 150px; padding: 30px 0 12px; display: flex; flex-direction: column; justify-content: space-between; font-size: 16px; color: var(--text-2); }
   .chassis .labels.left { text-align: right; }
   .chassis .mid { text-align: center; color: var(--text-3); }
   .dt-info { flex: 1; display: flex; flex-direction: column; gap: 12px; }
@@ -121,14 +142,26 @@
   .splitbar i { display: block; height: 100%; transition: flex-grow .2s; }
   .meter-head { display: flex; align-items: baseline; gap: 3px; }
   .meter-head .name { flex: 1; color: var(--text-2); }
-  .meter-head .v { font-size: 15px; }
+  .meter-head .v { font-size: 17px; }
   .meter-head .u { color: var(--text-3); }
-  .bar { margin-top: 8px; height: 3px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
-  .bar i { display: block; height: 100%; background: var(--text-2); transition: width .2s, background .2s; }
+  .track { position: relative; margin-top: 8px; }
+  .bar { height: 4px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--text-2); }
+  .track .tick { position: absolute; top: -3px; width: 2px; height: 10px; margin-left: -1px; border-radius: 1px; opacity: .85; }
+  .scale { position: relative; height: 15px; margin-top: 5px; font-size: 11px; }
+  .scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .scale span.first { transform: none; }
+  .scale span.last { transform: translateX(-100%); }
 
   .split { display: grid; grid-template-columns: 1fr 1.25fr; gap: 32px; align-items: center; }
-  section[data-view="offroad"] .split { grid-template-columns: 1fr 1.7fr; }
-  .split .dial { justify-self: center; }
+  section[data-view="offroad"] .split { grid-template-columns: 1fr 1.35fr; }
+
+  /* Swipe between Cluster / Driveline / Off-road */
+  main { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  .enter-from-right { animation: enterR .26s cubic-bezier(.2,.8,.2,1); }
+  .enter-from-left { animation: enterL .26s cubic-bezier(.2,.8,.2,1); }
+  @keyframes enterR { from { transform: translateX(48px); opacity: 0; } }
+  @keyframes enterL { from { transform: translateX(-48px); opacity: 0; } }  .split .dial { justify-self: center; }
   .stack { display: flex; flex-direction: column; gap: 12px; }
   .panel { background: var(--surface); border-radius: 14px; padding: 16px 18px; }
   .panel-head { display: flex; align-items: center; margin-bottom: 14px; }
@@ -136,8 +169,8 @@
   .stats { display: flex; align-items: flex-end; margin-bottom: 18px; }
   .stat { flex: 1; }
   .stat .k { color: var(--text-2); margin-bottom: 4px; }
-  .stat .v { font-size: 22px; font-weight: 400; }
-  .stat .v.large { font-size: 44px; font-weight: 300; letter-spacing: -0.5px; line-height: 1; }
+  .stat .v { font-size: 24px; font-weight: 400; }
+  .stat .v.large { font-size: 48px; font-weight: 300; letter-spacing: -0.5px; line-height: 1; }
   .stat .u { color: var(--text-3); margin-left: 4px; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
 
@@ -158,8 +191,8 @@
   .row { padding: 16px 18px; cursor: pointer; }
   .row + .row { border-top: 1px solid var(--hairline); margin: 0 18px; padding-left: 0; padding-right: 0; }
   .row-main { display: flex; align-items: center; gap: 6px; }
-  .row .code { width: 84px; font-size: 18px; font-weight: 400; flex: none; }
-  .row .title { font-size: 15px; }
+  .row .code { width: 84px; font-size: 19px; font-weight: 400; flex: none; }
+  .row .title { font-size: 16px; }
   .row .meta { color: var(--text-3); }
   .row .sev { color: var(--text-2); margin-right: 10px; }
   .row .more { color: var(--text-3); }
@@ -236,6 +269,7 @@
       <button data-t="75">Boost</button>
       <button data-t="100">Full</button>
     </div>
+    <div class="seg"><button id="sweepBtn" aria-pressed="false">Sweep</button></div>
   </div>
 
   <main>
@@ -252,7 +286,7 @@
           <div class="meter" id="m-cac"></div>
         </div>
         <div class="subdials">
-          <div class="dial compact vgt" id="vgt"><canvas></canvas><div class="vgt-eye num"><span id="vgtVal">65</span><small>%</small></div><div class="name">VGT vane</div></div>
+          <div class="dial compact vgt" id="vgt"><canvas></canvas><div class="vgt-eye num" id="vgtVal">65</div><div class="name">VGT vane %</div></div>
           <div class="dial compact" id="coolant"></div>
           <div class="dial compact" id="oil"></div>
         </div>
@@ -266,7 +300,7 @@
     <!-- Driveline -->
     <section class="view" data-view="driveline" hidden>
       <div class="split">
-        <div class="dial" id="boost2"></div>
+        <div class="dial" id="tach2"></div>
         <div class="stack">
           <div class="panel">
             <div class="panel-head">
@@ -274,7 +308,7 @@
               <span class="status" id="lockup"><span class="dot" style="background:var(--teal)"></span>Converter locked</span>
             </div>
             <div class="stats">
-              <div class="stat"><div class="k">Gear</div><div class="v large num" id="gear" style="color:var(--accent)">D4</div></div>
+              <div class="stat"><div class="k">Engine load</div><div><span class="v large num" id="load">62</span><span class="u">%</span></div></div>
               <div class="stat" style="flex:none"><div class="k">Engine torque</div><div><span class="v large num" id="tq2">368</span><span class="u">Nm</span></div></div>
             </div>
             <div class="meter" id="m-atf"></div>
@@ -293,18 +327,23 @@
     <!-- Off-road -->
     <section class="view" data-view="offroad" hidden>
       <div class="split">
-        <div class="dial" id="boost3"></div>
+        <div class="clinos">
+          <div class="clino">
+            <div class="clino-head"><span class="k">Roll</span><span><span class="v num" id="roll">0°</span><span class="u" id="rollDir">level</span></span></div>
+            <canvas id="cv-roll-big"></canvas>
+          </div>
+          <div class="clino">
+            <div class="clino-head"><span class="k">Pitch</span><span><span class="v num" id="pitch">0°</span><span class="u" id="pitchDir">level</span></span></div>
+            <canvas id="cv-pitch-big"></canvas>
+          </div>
+        </div>
         <div class="panel">
           <div class="panel-head">
             <span class="title">4Motion</span>
             <span class="status" id="traction"><span class="dot"></span>Full grip</span>
           </div>
-          <div class="angles">
-            <div class="angle"><div class="k">Steering</div><canvas id="cv-steer"></canvas><span class="v num" id="steer">0°</span><span class="u" id="steerDir">centre</span></div>
-            <div class="angle"><div class="k">Pitch</div><canvas id="cv-pitch"></canvas><span class="v num" id="pitch">0°</span><span class="u" id="pitchDir">level</span></div>
-            <div class="angle"><div class="k">Roll</div><canvas id="cv-roll"></canvas><span class="v num" id="roll">0°</span><span class="u" id="rollDir">level</span></div>
-          </div>
-          <div class="drivetrain">
+          <div class="drivetrain" style="margin-top:0">
+            <div class="angle steer-tile"><div class="k">Steering</div><canvas id="cv-steer"></canvas><div><span class="v num" id="steer">0°</span><span class="u" id="steerDir">centre</span></div></div>
             <div class="chassis">
               <div class="labels left num"><span id="s-fl"></span><span id="s-rl"></span></div>
               <div class="mid"><div>Front</div><canvas id="cv-chassis" style="width:92px;height:132px;display:block"></canvas></div>
@@ -365,10 +404,36 @@
     <span><span class="k">Peak boost</span><span class="v num" id="peak">+0.86 bar</span></span>
     <button id="resetPeak">Reset peak</button>
     <span class="grow"></span>
-    <span><span class="k">Polling</span><span class="v num">10.4 Hz</span></span>
+    <span id="pollStat"><span class="k">Polling</span><span class="v num">10.4 Hz</span></span>
+    <span id="fpsStat" hidden><span class="k">Frame rate</span><span class="v num" id="fps">–</span></span>
   </footer>
+
+  <div class="intro" id="intro" title="Tap to skip">
+    <svg class="logo" id="introLogo" viewBox="0 0 108 108">
+      <path d="M37.03,70.97 A24,24 0 1,1 70.97,70.97" stroke="#EDEDEF" stroke-opacity=".2" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <path d="M77.93,55.88 A24,24 0 0,1 70.97,70.97" stroke="#FF5A4F" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <path d="M37.03,70.97 A24,24 0 1,1 74.66,41.79" stroke="#FFA43A" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <path d="M49.70,56.55 L71.22,43.82" stroke="#EDEDEF" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="54" cy="54" r="5.5" fill="#1C1C1F"/><circle cx="54" cy="54" r="2.5" fill="#3CCFB8"/>
+    </svg>
+    <div class="word" id="introWord">INGWE</div>
+  </div>
 </div>
-<p class="caption">Interactive preview of the Android cluster (1280×720 head unit). Use <b>Demo</b> to drive the simulated throttle. Data is simulated.</p>
+<div class="caption">
+  <svg viewBox="0 0 108 108" aria-label="App icon">
+    <rect width="108" height="108" fill="#0B0B0C"/>
+    <g transform="translate(54 54) scale(1.35) translate(-54 -54)">
+      <path d="M37.03,70.97 A24,24 0 1,1 70.97,70.97" stroke="#EDEDEF" stroke-opacity=".2" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <path d="M77.93,55.88 A24,24 0 0,1 70.97,70.97" stroke="#FF5A4F" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <path d="M37.03,70.97 A24,24 0 1,1 74.66,41.79" stroke="#FFA43A" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <path d="M49.70,56.55 L71.22,43.82" stroke="#EDEDEF" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="54" cy="54" r="5.5" fill="#1C1C1F"/><circle cx="54" cy="54" r="2.5" fill="#3CCFB8"/>
+    </g>
+  </svg>
+  <span>Interactive preview of the Android cluster (1280×720 head unit). Use <b>Demo</b> to drive the simulated throttle — <b>Sweep</b> runs it continuously. Data is simulated.</span>
+  <span class="grow"></span>
+  <button id="replayIntro">Replay start-up</button>
+</div>
 
 <script>
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -379,7 +444,9 @@ const C = {
 };
 const withAlpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
 
-const state = { unit: 'bar', throttle: 0.55, view: 'cluster', peakKPa: null, filter: 'all', expanded: null };
+const state = { unit: 'bar', throttle: 0.55, view: 'cluster', peakKPa: null, filter: 'all', expanded: null, sweep: 0 };
+// Ignition sweep: blend a live value towards full scale (mirrors Ignition.kt)
+const sweepTowards = (v, full) => state.sweep <= 0 ? v : v + (full - v) * state.sweep;
 
 /* ── Faults ─────────────────────────────────────────────────────────────── */
 const SAMPLE = [
@@ -409,6 +476,7 @@ function sim(t) {
   return {
     wheels, maxSlip: Math.max(wheels.fl, wheels.fr, wheels.rl, wheels.rr),
     rearLocked: t > 0.8, rearTorque: Math.max(35, Math.min(65, 60 - rearBias * 1.5)), roll: t * 14 - 3,
+    targetKPa: 100 + t * 170, load: Math.min(100, 15 + t * 75),
     rpm: 800 + t * 3500, boostKPa: 95 + t * 165, speed,
     coolant: 88 + t * 8, oil: 92 + t * 14, battery: 14.2 - t * 0.3, fuel: 1.2 + t * 14.5,
     egt: 310 + t * 470, cac: 30 + t * 28, vgt: 35 + t * 55, torque: 110 + t * 470,
@@ -423,12 +491,12 @@ const fmtBoost = (v, unit) => (v >= 0 ? '+' : '') + v.toFixed(unit === 'bar' ? 2
 function makeDial(el, size) {
   const dpr = window.devicePixelRatio || 1;
   const compact = el.classList.contains('compact');
-  el.innerHTML = `<canvas></canvas><div class="readout"><div class="value num"></div><div class="label"></div></div>` +
+  el.innerHTML = `<canvas></canvas><div class="readout"><div class="value num"></div><div><span class="label"></span><span class="sub num" hidden></span></div></div>` +
     (compact ? `<div class="name"></div>` : '');
   const cv = el.querySelector('canvas');
   cv.width = size * dpr; cv.height = size * dpr;
   cv.style.width = cv.style.height = size + 'px';
-  el.querySelector('.value').style.fontSize = Math.round(size * (compact ? 0.22 : 0.17)) + 'px';
+  el.querySelector('.value').style.fontSize = Math.round(size * (compact ? 0.245 : 0.19)) + 'px';
   return { el, cv, size, dpr, compact };
 }
 
@@ -439,7 +507,8 @@ function drawDial(d, o) {
   ctx.clearRect(0, 0, size, size);
   const cx = size / 2, cy = size / 2, R = size / 2, r = R * 0.92;
   const start = 135 * Math.PI / 180, sweep = 270 * Math.PI / 180;
-  const v = Math.max(o.min, Math.min(o.max, o.value));
+  const sprung = spring(d.el.id + ':' + o.unit, o.value, o.max - o.min);
+  const v = sweepTowards(Math.max(o.min, Math.min(o.max, sprung)), o.max);
   const ang = x => start + ((x - o.min) / (o.max - o.min)) * sweep;
   const arc = (color, a, b, w, cap = 'butt') => {
     if (b <= a) return;
@@ -471,7 +540,7 @@ function drawDial(d, o) {
   v >= origin ? arc(stateColor, origin, v, valueW, 'round') : arc(stateColor, v, origin, valueW, 'round');
 
   const n = Math.round((o.max - o.min) / o.step);
-  ctx.font = `500 ${Math.round(R * 0.085)}px system-ui, sans-serif`;
+  ctx.font = `500 ${Math.round(R * 0.095)}px system-ui, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (let i = 0; i <= n; i++) {
     const tv = o.min + i * o.step;
@@ -490,7 +559,20 @@ function drawDial(d, o) {
   if (o.peak != null && o.peak >= o.min && o.peak <= o.max) {
     radial(ang(o.peak), r + R * 0.025, r + R * 0.075, C.text, R * 0.016);
   }
-  if (!compact) {
+  // ECU target (e.g. requested boost): a teal "bug" laid across the track — distinct from the
+  // white peak-hold mark, which sits outside the track.
+  if (o.target != null) {
+    const tv = sweepTowards(Math.max(o.min, Math.min(o.max, o.target)), o.max);
+    radial(ang(tv), r - R * 0.04, r + R * 0.04, css('--bg'), R * 0.05, 'butt');
+    radial(ang(tv), r - R * 0.035, r + R * 0.035, C.teal, R * 0.028, 'round');
+  }
+  if (!compact && o.hub) {
+    // Sport-tacho style: a solid centre hub that holds text (e.g. the gear); needle starts at its edge
+    const hubR = R * 0.27;
+    radial(ang(v), hubR + R * 0.02, r - R * 0.06, stateColor, R * 0.022, 'round');
+    ctx.beginPath(); ctx.arc(cx, cy, hubR, 0, Math.PI * 2); ctx.fillStyle = C.surfaceHigh; ctx.fill();
+    ctx.lineWidth = R * 0.012; ctx.strokeStyle = withAlpha(stateColor, 0.6); ctx.stroke();
+  } else if (!compact) {
     radial(ang(v), -R * 0.08, r - R * 0.06, stateColor, R * 0.022, 'round');
     ctx.beginPath(); ctx.arc(cx, cy, R * 0.07, 0, Math.PI * 2); ctx.fillStyle = C.surfaceHigh; ctx.fill();
     ctx.beginPath(); ctx.arc(cx, cy, R * 0.025, 0, Math.PI * 2); ctx.fillStyle = stateColor; ctx.fill();
@@ -500,6 +582,8 @@ function drawDial(d, o) {
   valueEl.textContent = (o.text ?? (x => x.toFixed(0)))(v);
   valueEl.classList.toggle('alert', stateColor === C.alert);
   d.el.querySelector('.label').textContent = compact ? o.unit : `${o.label} · ${o.unit}`;
+  const sub = d.el.querySelector('.sub');
+  if (sub) { sub.textContent = o.sub ?? ''; sub.hidden = !o.sub; }
   if (compact) d.el.querySelector('.name').textContent = o.label;
 }
 
@@ -535,20 +619,21 @@ function drawVgt(pct) {
   const el = document.getElementById('vgt');
   const size = el.offsetWidth || 124;
   const { ctx } = prep(el.querySelector('canvas'), size, size - 14);
-  const r = (size - 14) / 2, cx = size / 2, cy = r, f = Math.max(0, Math.min(1, pct / 100));
+  pct = spring('vgt', pct, 100);
+  const r = (size - 14) / 2, cx = size / 2, cy = r, f = sweepTowards(Math.max(0, Math.min(1, pct / 100)), 1);
   const ring = r * 0.94;
   ctx.lineWidth = r * 0.05;
   ctx.strokeStyle = C.hair; ctx.beginPath(); ctx.arc(cx, cy, ring, 0, Math.PI * 2); ctx.stroke();
   ctx.strokeStyle = C.teal; ctx.beginPath(); ctx.arc(cx, cy, ring, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
   // turbine wheel
-  ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(cx, cy, r * 0.46, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(cx, cy, r * 0.52, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = C.text3; ctx.lineWidth = r * 0.03;
   for (let i = 0; i < 12; i++) {
     const a = rad(i * 30), b = rad(i * 30 + 22);
-    ctx.beginPath(); ctx.moveTo(cx + r * 0.34 * Math.cos(a), cy + r * 0.34 * Math.sin(a));
-    ctx.lineTo(cx + r * 0.45 * Math.cos(b), cy + r * 0.45 * Math.sin(b)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.42 * Math.cos(a), cy + r * 0.42 * Math.sin(a));
+    ctx.lineTo(cx + r * 0.51 * Math.cos(b), cy + r * 0.51 * Math.sin(b)); ctx.stroke();
   }
-  ctx.fillStyle = css('--bg'); ctx.beginPath(); ctx.arc(cx, cy, r * 0.33, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = css('--bg'); ctx.beginPath(); ctx.arc(cx, cy, r * 0.40, 0, Math.PI * 2); ctx.fill();
   // guide vanes: tangential when closed, pivot ~58° towards radial when open
   const pivotR = r * 0.66, len = r * 0.30;
   for (let i = 0; i < 11; i++) {
@@ -588,13 +673,11 @@ function drawSteering(deg) {
   ctx.restore();
 }
 
-// Side view of a double-cab pickup, front to the right. +pitch = nose up.
-function drawPitch(deg, color) {
-  const { ctx, w, h } = prep(document.getElementById('cv-pitch'));
-  const g = h * 0.88, L = Math.min(w * 0.86, h * 2.0), left = w / 2 - L / 2;
+// Side view of a double-cab pickup, front to the right, wheels on (cx, g), length L. +pitch = nose up.
+function truckSide(ctx, cx, g, L, deg, color) {
+  const left = cx - L / 2;
   const P = (x, y) => [left + x * L, g - y * L];
-  levelLine(ctx, w, g);
-  ctx.save(); ctx.translate(w / 2, g); ctx.rotate(rad(-deg)); ctx.translate(-w / 2, -g);
+  ctx.save(); ctx.translate(cx, g); ctx.rotate(rad(-deg)); ctx.translate(-cx, -g);
   const archR = 0.11 * L, wheelR = 0.085 * L;
   const [fx, ay] = P(0.79, 0.10), [rx] = P(0.22, 0.10);
   ctx.beginPath();
@@ -616,10 +699,8 @@ function drawPitch(deg, color) {
   ctx.restore();
 }
 
-// Rear view. +roll = right side down.
-function drawRoll(deg, color) {
-  const { ctx, w, h } = prep(document.getElementById('cv-roll'));
-  const g = h * 0.88, W = Math.min(w * 0.62, h * 1.12), cx = w / 2;
+// Rear view, wheels on (cx, g), width W. +roll = right side down.
+function truckRear(ctx, cx, g, W, deg, color) {
   const P = (x, y) => [cx + x * W, g - y * W];
   const box = (x0, y0, x1, y1, fill, stroke) => {
     const [X0, Y1] = P(x0, y1), [X1, Y0] = P(x1, y0);
@@ -627,7 +708,6 @@ function drawRoll(deg, color) {
     if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
   };
-  levelLine(ctx, w, g);
   ctx.save(); ctx.translate(cx, g); ctx.rotate(rad(deg)); ctx.translate(-cx, -g);
   box(-0.49, 0, -0.32, 0.25, C.surfaceHigh, color);
   box(0.32, 0, 0.49, 0.25, C.surfaceHigh, color);
@@ -640,6 +720,46 @@ function drawRoll(deg, color) {
   box(-0.44, 0.50, -0.34, 0.56, color);
   box(0.34, 0.50, 0.44, 0.56, color);
   ctx.restore();
+}
+
+/*
+ * Clinometer (mirrors Clinometer in OffRoadComponents.kt): a 180° scale from −45° to +45°
+ * with caution / alert zones, a pointer on the scale and the truck tilting in the middle
+ * against a dashed level line. kind = 'roll' (rear view) or 'pitch' (side view).
+ */
+function drawClino(canvasId, deg, kind, caution, alert) {
+  const { ctx, w, h } = prep(document.getElementById(canvasId));
+  const cx = w / 2, base = h * 0.86;
+  const R = Math.min(w / 2 - 14, base - 14);
+  const LIMIT = 45;
+  const ang = d => rad(270 + (Math.max(-LIMIT, Math.min(LIMIT, d)) / LIMIT) * 90);
+  const color = angleColor(deg, caution, alert);
+  const arc = (from, to, col, width) => {
+    ctx.beginPath(); ctx.arc(cx, base, R, ang(from), ang(to)); ctx.strokeStyle = col; ctx.lineWidth = width; ctx.lineCap = 'butt'; ctx.stroke();
+  };
+  // scale + zones (both sides)
+  arc(-LIMIT, LIMIT, C.hair, 3);
+  arc(-alert, -caution, withAlpha(C.caution, 0.5), 3); arc(caution, alert, withAlpha(C.caution, 0.5), 3);
+  arc(-LIMIT, -alert, withAlpha(C.alert, 0.8), 3); arc(alert, LIMIT, withAlpha(C.alert, 0.8), 3);
+  // ticks every 5°, labels every 15°
+  ctx.font = '500 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let d = -LIMIT; d <= LIMIT; d += 5) {
+    const a = ang(d), major = d % 15 === 0;
+    const r0 = R - (major ? 12 : 7), r1 = R - 3;
+    ctx.beginPath(); ctx.moveTo(cx + r0 * Math.cos(a), base + r0 * Math.sin(a)); ctx.lineTo(cx + r1 * Math.cos(a), base + r1 * Math.sin(a));
+    ctx.strokeStyle = Math.abs(d) >= alert ? C.alert : major ? C.text2 : C.text3; ctx.lineWidth = major ? 1.6 : 1; ctx.stroke();
+    if (major) { ctx.fillStyle = Math.abs(d) >= alert ? C.alert : C.text3; ctx.fillText(Math.abs(d), cx + (R - 24) * Math.cos(a), base + (R - 24) * Math.sin(a)); }
+  }
+  // live arc from 0 to the angle + pointer
+  const live = Math.max(-LIMIT, Math.min(LIMIT, deg));
+  ctx.beginPath(); ctx.arc(cx, base, R, ang(Math.min(0, live)), ang(Math.max(0, live))); ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.stroke();
+  const pa = ang(live);
+  ctx.save(); ctx.translate(cx + (R + 9) * Math.cos(pa), base + (R + 9) * Math.sin(pa)); ctx.rotate(pa + Math.PI / 2);
+  ctx.beginPath(); ctx.moveTo(0, 7); ctx.lineTo(-6, -4); ctx.lineTo(6, -4); ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+  // level line + truck
+  levelLine(ctx, w, base);
+  if (kind === 'roll') truckRear(ctx, cx, base, R * 0.68, deg, color);
+  else truckSide(ctx, cx, base, R * 1.12, deg, color);
 }
 
 // Top-down drivetrain, front up. Wheels coloured by slip.
@@ -663,22 +783,87 @@ function drawChassis(wheels, rearLocked) {
 
 const statusHtml = (text, color) => `<span class="dot" style="background:${color}"></span>${text}`;
 
-/* ── Linear meter ───────────────────────────────────────────────────────── */
+/* ── Needle physics ─────────────────────────────────────────────────────────
+ * Every needle, arc and bar follows its value on a damped spring (slight overshoot,
+ * like a real instrument needle) instead of jumping. Numbers are read from the same
+ * spring, so they count up and down with the needle. Mirrors spring() animations in
+ * the app (dampingRatio ≈ 0.62).
+ */
+const springs = new Map();
+const SPRING_K = 120, SPRING_ZETA = 0.62, SPRING_C = 2 * Math.sqrt(SPRING_K) * SPRING_ZETA;
+let ticking = false, lastTick = 0;
+function spring(key, target, span = 1) {
+  let s = springs.get(key);
+  if (!s) { s = { x: target, v: 0, t: target, span: span || 1 }; springs.set(key, s); }
+  s.t = target; s.span = span || 1;
+  if (Math.abs(s.t - s.x) > s.span * 1e-4 || Math.abs(s.v) > s.span * 1e-3) ensureTick();
+  return s.x;
+}
+function ensureTick() {
+  if (ticking) return;
+  ticking = true; lastTick = performance.now();
+  requestAnimationFrame(tickSprings);
+}
+function tickSprings(now) {
+  const dt = Math.min(0.034, Math.max(0.001, (now - lastTick) / 1000));
+  lastTick = now;
+  for (const s of springs.values()) {
+    const a = SPRING_K * (s.t - s.x) - SPRING_C * s.v;   // semi-implicit Euler: stable at 30–144 Hz
+    s.v += a * dt; s.x += s.v * dt;
+    if (Math.abs(s.t - s.x) < s.span * 2e-4 && Math.abs(s.v) < s.span * 2e-3) { s.x = s.t; s.v = 0; }
+  }
+  ticking = false;
+  render(); // re-arms the loop via spring() while anything is still moving
+}
+
+/* ── Linear meter: value, bar, threshold ticks and scale numbers ────────── */
+const fmtScale = n => (Math.round(n * 10) / 10).toString();
 function meter(id, label, value, unit, min, max, o = {}) {
   const el = document.getElementById(id);
-  if (!el.firstChild) el.innerHTML = `<div class="meter-head"><span class="name"></span><span class="v num"></span><span class="u"></span></div><div class="bar"><i></i></div>`;
+  if (!el.firstChild) {
+    el.innerHTML = `<div class="meter-head"><span class="name"></span><span class="v num"></span><span class="u"></span></div>
+      <div class="track"><div class="bar"><i></i></div></div><div class="scale num"></div>`;
+  }
+  const shown = spring(id, value, max - min);
   const color =
-    o.alert != null && value >= o.alert ? C.alert :
-    o.caution != null && value >= o.caution ? C.caution :
-    o.cool != null && value < o.cool ? C.cool : null;
+    o.alert != null && shown >= o.alert ? C.alert :
+    o.caution != null && shown >= o.caution ? C.caution :
+    o.cool != null && shown < o.cool ? C.cool : null;
   el.querySelector('.name').textContent = label;
   const v = el.querySelector('.v');
-  v.textContent = value.toFixed(o.digits ?? 0);
+  v.textContent = shown.toFixed(o.digits ?? 0);
   v.style.color = color ?? C.text;
   el.querySelector('.u').textContent = unit;
   const fill = el.querySelector('.bar i');
-  fill.style.width = (Math.max(0, Math.min(1, (value - min) / (max - min))) * 100) + '%';
+  fill.style.width = (sweepTowards(Math.max(0, Math.min(1, (shown - min) / (max - min))), 1) * 100) + '%';
   fill.style.background = color ?? C.teal;
+
+  // Scale: built once per range. Ticks for every threshold; labels for min, max and
+  // thresholds that have room (≥ 12 % from their neighbours).
+  const key = [min, max, o.cool, o.caution, o.alert].join('|');
+  if (el.dataset.scale !== key) {
+    el.dataset.scale = key;
+    const pos = x => ((x - min) / (max - min)) * 100;
+    const marks = [
+      o.cool != null && { at: o.cool, col: C.cool },
+      o.caution != null && { at: o.caution, col: C.caution },
+      o.alert != null && { at: o.alert, col: C.alert },
+    ].filter(Boolean);
+    el.querySelectorAll('.track .tick').forEach(t => t.remove());
+    for (const m of marks) {
+      const t = document.createElement('b'); t.className = 'tick';
+      t.style.left = pos(m.at) + '%'; t.style.background = m.col;
+      el.querySelector('.track').appendChild(t);
+    }
+    const labels = [{ at: min, col: C.text3, cls: 'first' }];
+    for (const m of marks) {
+      const prev = labels[labels.length - 1];
+      if (pos(m.at) - pos(prev.at) >= 12 && pos(max) - pos(m.at) >= 12) labels.push({ at: m.at, col: m.col });
+    }
+    labels.push({ at: max, col: C.text3, cls: 'last' });
+    el.querySelector('.scale').innerHTML = labels.map(l =>
+      `<span class="${l.cls ?? ''}" style="left:${pos(l.at)}%;color:${l.col}">${fmtScale(l.at)}</span>`).join('');
+  }
 }
 
 /* ── Render ─────────────────────────────────────────────────────────────── */
@@ -691,8 +876,7 @@ function buildDials() {
     speed: makeDial(document.getElementById('speed'), small ? 210 : 224),
     coolant: makeDial(document.getElementById('coolant'), small ? 112 : 124),
     oil: makeDial(document.getElementById('oil'), small ? 112 : 124),
-    boost2: makeDial(document.getElementById('boost2'), small ? 260 : 290),
-    boost3: makeDial(document.getElementById('boost3'), small ? 260 : 290),
+    tach2: makeDial(document.getElementById('tach2'), small ? 280 : 330),
   };
 }
 
@@ -705,7 +889,18 @@ function render() {
     value: car.rpm, min: 0, max: 6000, step: 1000, minor: 3, caution: 4000, redline: 4500,
     label: 'Engine', unit: 'rpm', text: x => (Math.round(x / 10) * 10).toLocaleString('en-US'), tick: x => String(x / 1000),
   });
-  ['boost', 'boost2', 'boost3'].forEach(k => drawDial(dials[k], boostOpts(car.boostKPa, state.peakKPa, u)));
+  drawDial(dials.boost, { ...boostOpts(car.boostKPa, state.peakKPa, u), target: boostFrom(car.targetKPa, u),
+    sub: `target ${fmtBoost(sweepTowards(boostFrom(car.targetKPa, u), u === 'bar' ? 2.5 : 35), u)}` });
+
+  // Driveline tacho: rpm with the current gear in the centre
+  drawDial(dials.tach2, {
+    value: car.rpm, min: 0, max: 6000, step: 1000, minor: 3, caution: 4000, redline: 4500, hub: true,
+    label: 'Engine', unit: 'rpm', text: x => (Math.round(x / 10) * 10).toLocaleString('en-US'), tick: x => String(x / 1000),
+  });
+  let gearEl = dials.tach2.el.querySelector('.gear');
+  if (!gearEl) { gearEl = document.createElement('div'); gearEl.className = 'gear num'; dials.tach2.el.appendChild(gearEl); }
+  gearEl.textContent = car.gear;
+  gearEl.style.color = car.slip ? C.caution : C.accent;
   drawDial(dials.speed, {
     value: car.speed, min: 0, max: 220, step: 20, minor: 1,
     label: 'Speed', unit: 'km/h', accent: C.teal, text: x => x.toFixed(0), tick: x => Math.round(x) % 40 === 0 ? x.toFixed(0) : '',
@@ -718,10 +913,10 @@ function render() {
 
   meter('m-egt', 'Exhaust gas, pre-turbo', car.egt, '°C', 200, 900, { caution: 720, alert: 780 });
   meter('m-cac', 'Charge air', car.cac, '°C', 0, 90, { caution: 55, alert: 70 });
-  meter('m-tq', 'Engine torque', car.torque, 'Nm', 0, 650, { caution: 580 });
+  meter('m-tq', 'Engine torque', car.torque, 'Nm', 0, 700, { caution: 620 });
   meter('m-batt1', 'Battery', car.battery, 'V', 10, 16, { cool: 12.4, digits: 1 });
 
-  document.getElementById('gear').textContent = car.gear;
+  document.getElementById('load').textContent = car.load.toFixed(0);
   document.getElementById('tq2').textContent = car.torque.toFixed(0);
   document.getElementById('lockup').innerHTML = car.slip
     ? `<span class="dot" style="background:${C.caution}"></span>Converter slipping`
@@ -732,8 +927,9 @@ function render() {
 
   // 4Motion (only draw when visible — canvases have no size while hidden)
   if (state.view === 'offroad') {
-    const steer = Math.round(car.steer), pitch = Math.round(car.pitch), roll = Math.round(car.roll);
-    const pitchCol = angleColor(car.pitch, 25, 35), rollCol = angleColor(car.roll, 20, 30);
+    const steerS = spring('steer', car.steer, 1080), pitchS = spring('pitch', car.pitch, 90), rollS = spring('roll', car.roll, 90);
+    const steer = Math.round(steerS), pitch = Math.round(pitchS), roll = Math.round(rollS);
+    const pitchCol = angleColor(pitchS, 25, 35), rollCol = angleColor(rollS, 20, 30);
     document.getElementById('steer').textContent = Math.abs(steer) + '°';
     document.getElementById('steerDir').textContent = steer > 0 ? 'right' : steer < 0 ? 'left' : 'centre';
     document.getElementById('pitch').textContent = Math.abs(pitch) + '°';
@@ -742,9 +938,9 @@ function render() {
     document.getElementById('roll').textContent = Math.abs(roll) + '°';
     document.getElementById('roll').style.color = rollCol === C.teal ? C.text : rollCol;
     document.getElementById('rollDir').textContent = roll > 0 ? 'right side down' : roll < 0 ? 'left side down' : 'level';
-    drawSteering(car.steer);
-    drawPitch(car.pitch, pitchCol);
-    drawRoll(car.roll, rollCol);
+    drawSteering(steerS);
+    drawClino('cv-pitch-big', pitchS, 'pitch', 25, 35);
+    drawClino('cv-roll-big', rollS, 'roll', 20, 30);
     drawChassis(car.wheels, car.rearLocked);
     for (const k of ['fl', 'fr', 'rl', 'rr']) {
       const el = document.getElementById('s-' + k), v = car.wheels[k];
@@ -807,13 +1003,39 @@ function renderFaults() {
     </div>`).join('');
 }
 
+const PAGES = ['cluster', 'driveline', 'offroad'];
 function setView(view) {
+  const from = PAGES.indexOf(state.view), to = PAGES.indexOf(view);
   state.view = view;
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.view === view)));
-  document.querySelectorAll('section.view').forEach(s => { s.hidden = s.dataset.view !== view; });
+  document.querySelectorAll('section.view').forEach(s => {
+    s.hidden = s.dataset.view !== view;
+    s.classList.remove('enter-from-right', 'enter-from-left');
+    if (!s.hidden && from >= 0 && to >= 0 && from !== to) {
+      void s.offsetWidth; // restart the animation
+      s.classList.add(to > from ? 'enter-from-right' : 'enter-from-left');
+    }
+  });
   renderFaults();
   render();
 }
+
+// Swipe left / right on the body to move between the three cluster pages (mirrors HorizontalPager)
+(function swipe() {
+  const area = document.querySelector('main');
+  let x0 = null, y0 = 0, t0 = 0;
+  area.addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; t0 = performance.now(); });
+  area.addEventListener('pointerup', e => {
+    if (x0 == null) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0, fast = performance.now() - t0 < 600;
+    x0 = null;
+    const i = PAGES.indexOf(state.view);
+    if (i < 0 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || !fast) return;
+    const next = PAGES[Math.max(0, Math.min(PAGES.length - 1, i + (dx < 0 ? 1 : -1)))];
+    if (next !== state.view) setView(next);
+  });
+  area.addEventListener('pointercancel', () => { x0 = null; });
+})();
 
 /* ── Wiring ─────────────────────────────────────────────────────────────── */
 document.querySelectorAll('[data-view]:not(section)').forEach(el => el.addEventListener('click', () => setView(el.dataset.view)));
@@ -870,11 +1092,84 @@ document.getElementById('confirmClear').addEventListener('click', () => {
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { buildDials(); render(); }, 150); });
 
+/* ── Start-up: logo → ignition sweep (same timing as IgnitionIntro) ─────── */
+const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;        // ≈ FastOutSlowIn
+const easeOut = t => 1 - Math.pow(1 - t, 3);                                       // ≈ LinearOutSlowIn
+const clamp01 = t => Math.max(0, Math.min(1, t));
+let introRun = 0;
+function playIntro() {
+  const run = ++introRun;
+  const intro = document.getElementById('intro'), logo = document.getElementById('introLogo'), word = document.getElementById('introWord');
+  intro.hidden = false;
+  document.body.classList.add('sweeping');
+  const t0 = performance.now();
+  let skipped = false;
+  intro.onclick = () => { skipped = true; };
+  (function frame(now) {
+    if (run !== introRun) return;
+    const t = now - t0;
+    // wordmark: in 150–500 ms, out 850–1150 ms
+    const w = t < 500 ? clamp01((t - 150) / 350) : 1 - clamp01((t - 850) / 300);
+    // overlay: fade 800–1350 ms while the logo grows
+    const o = skipped ? 0 : 1 - ease(clamp01((t - 800) / 550));
+    // sweep: up 900–1550, hold 80, down 1630–2430
+    state.sweep = t < 900 ? 0 : t < 1550 ? ease((t - 900) / 650) : t < 1630 ? 1 : 1 - easeOut(clamp01((t - 1630) / 800));
+    word.style.opacity = skipped ? 0 : w;
+    word.style.transform = `translateY(${76 + (1 - w) * 8}px)`;
+    intro.style.opacity = o;
+    logo.style.transform = `scale(${1 + (1 - o) * 0.25})`;
+    intro.hidden = o <= 0;
+    render();
+    if (t < 2430) requestAnimationFrame(frame);
+    else { state.sweep = 0; document.body.classList.remove('sweeping'); render(); }
+  })(t0);
+}
+document.getElementById('replayIntro').addEventListener('click', playIntro);
+
+/* ── Stress test + frame-rate meter (mirrors DemoControls / FrameRateStat) ── */
+let autoSweep = false;
+document.getElementById('sweepBtn').addEventListener('click', e => {
+  autoSweep = !autoSweep;
+  e.currentTarget.setAttribute('aria-pressed', String(autoSweep));
+  if (autoSweep) {
+    const t0 = performance.now(), from = state.throttle;
+    document.body.classList.add('sweeping');
+    (function loop(now) {
+      if (!autoSweep) { document.body.classList.remove('sweeping'); return; }
+      const phase = ((now - t0) / 1600) % 2;
+      state.throttle = phase < 1 ? ease(phase) : 1 - ease(phase - 1);
+      document.getElementById('throttle').value = Math.round(state.throttle * 100);
+      render();
+      requestAnimationFrame(loop);
+    })(t0);
+  }
+});
+(function fpsMeter() {
+  let frames = 0, start = performance.now(), last = start, worst = 0;
+  (function tick(now) {
+    frames++; worst = Math.max(worst, now - last); last = now;
+    if (now - start >= 1000) {
+      const el = document.getElementById('fps');
+      el.textContent = `${frames} fps · worst ${Math.round(worst)} ms`;
+      el.style.color = frames >= 50 ? C.teal : frames >= 30 ? C.caution : C.alert;
+      frames = 0; worst = 0; start = now;
+    }
+    requestAnimationFrame(tick);
+  })(start);
+})();
+document.getElementById('demoLink').addEventListener('click', () => {
+  const on = !document.getElementById('demo').hidden;
+  document.getElementById('fpsStat').hidden = !on;
+  document.getElementById('pollStat').hidden = on;
+  if (!on && autoSweep) document.getElementById('sweepBtn').click();
+});
+
 buildDials();
 document.getElementById('demo').hidden = true;
 const initial = new URLSearchParams(location.search).get('tab') || location.hash.slice(1);
 setView(['cluster', 'driveline', 'offroad', 'faults'].includes(initial) ? initial : 'cluster');
 render();
+if (!new URLSearchParams(location.search).has('nointro')) playIntro(); else document.getElementById('intro').hidden = true;
 </script>
 </body>
 </html>

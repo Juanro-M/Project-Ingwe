@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    id("kotlin-kapt")
 }
 
 android {
@@ -12,17 +11,24 @@ android {
 
     defaultConfig {
         applicationId = "io.ingwe.dash"
-        minSdk = 31
+        // Head units often report a spoofed Android version; many UIS8581A units really run Android 9/10.
+        minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-M1"
+        versionCode = 3
+        versionName = "0.3.0-M1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Head units are slow: R8 shrinking/optimisation and resource shrinking
+            // matter far more here than on a phone.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed with the local debug key so it installs over the debug build
+            // without uninstalling. Swap for a real keystore before any public release.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -39,8 +45,9 @@ android {
         compose = true
     }
 
-    // Lock to landscape for head unit; phone respects orientation normally
-    // Individual activities override this if needed.
+    packaging {
+        resources.excludes += setOf("META-INF/{AL2.0,LGPL2.1}", "DebugProbesKt.bin", "kotlin-tooling-metadata.json")
+    }
 }
 
 dependencies {
@@ -52,13 +59,12 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    kapt(libs.room.compiler)
-    implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.navigation.compose)
+    // Installs the Compose libraries' bundled baseline profiles on sideloaded installs,
+    // so startup and first frames run AOT-compiled code instead of the interpreter.
+    implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

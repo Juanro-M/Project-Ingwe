@@ -8,10 +8,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -27,7 +36,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 import io.ingwe.dash.ui.theme.*
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.roundToInt
 
 enum class DiffState(val label: String) { OPEN("Open"), LOCKED("Locked") }
@@ -53,27 +64,19 @@ private fun angleColor(deg: Float, caution: Float, alert: Float) = when {
 }
 
 /**
- * 4Motion off-road panel.
- *
- * Top: three angle tiles that *show* the angle — a steering wheel that turns,
- * a side-view truck that pitches and a rear-view truck that rolls, each against
- * a dashed level line.
- * Bottom: top-down drivetrain with each wheel coloured by slip, centre / rear
- * differential state and the current front:rear torque split.
+ * 4Motion panel: steering wheel that turns with the real angle, a top-down drivetrain
+ * with each wheel coloured by slip, centre / rear differential state and the current
+ * front:rear torque split. (Pitch and roll have their own [Clinometer]s.)
  */
 @Composable
 fun OffRoadPanel(
     steeringAngleDeg: Float,
-    pitchDeg: Float,
-    rollDeg: Float,
     wheelSlip: WheelSlip,
     rearDiff: DiffState,
     rearTorquePct: Float,
     modifier: Modifier = Modifier,
 ) {
-    val steer by animateFloatAsState(steeringAngleDeg, tween(220), label = "steer")
-    val pitch by animateFloatAsState(pitchDeg, tween(220), label = "pitch")
-    val roll by animateFloatAsState(rollDeg, tween(220), label = "roll")
+    val steer = animateFloatAsState(steeringAngleDeg, NeedleSpring, label = "steer")
 
     val traction = when {
         wheelSlip.max >= SLIP_ALERT -> "Wheels slipping" to IngweAlert
@@ -86,44 +89,18 @@ fun OffRoadPanel(
         title = "4Motion",
         trailing = { StatusDot(traction.first, traction.second) },
     ) {
-        // ── Angles ───────────────────────────────────────────────────────────
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
             val s = steeringAngleDeg.roundToInt()
             AngleTile(
                 label = "Steering",
                 value = "${abs(s)}°",
                 caption = when { s > 0 -> "right"; s < 0 -> "left"; else -> "centre" },
                 color = IngweTeal,
-                modifier = Modifier.weight(1f),
-            ) { drawSteeringWheel(steer) }
-
-            val p = pitchDeg.roundToInt()
-            val pitchColor = angleColor(pitchDeg, caution = 25f, alert = 35f)
-            AngleTile(
-                label = "Pitch",
-                value = "${abs(p)}°",
-                caption = when { p > 0 -> "nose up"; p < 0 -> "nose down"; else -> "level" },
-                color = pitchColor,
-                modifier = Modifier.weight(1f),
-            ) { drawPitchProfile(pitch, pitchColor) }
-
-            val r = rollDeg.roundToInt()
-            val rollColor = angleColor(rollDeg, caution = 20f, alert = 30f)
-            AngleTile(
-                label = "Roll",
-                value = "${abs(r)}°",
-                caption = when { r > 0 -> "right side down"; r < 0 -> "left side down"; else -> "level" },
-                color = rollColor,
-                modifier = Modifier.weight(1f),
-            ) { drawRollProfile(roll, rollColor) }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // ── Drivetrain ───────────────────────────────────────────────────────
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                modifier = Modifier.width(172.dp).fillMaxHeight(),
+            ) { drawSteeringWheel(steer.value) }
+            Spacer(Modifier.width(20.dp))
             DrivetrainDiagram(wheelSlip = wheelSlip, rearDiff = rearDiff)
-            Spacer(Modifier.width(24.dp))
+            Spacer(Modifier.width(20.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatusLine("Centre diff", "Torsen · ${(100 - rearTorquePct).roundToInt()} : ${rearTorquePct.roundToInt()}", IngweTeal)
                 StatusLine(
@@ -144,6 +121,58 @@ fun OffRoadPanel(
                 )
             }
         }
+    }
+}
+
+enum class ClinometerKind { ROLL, PITCH }
+
+/**
+ * Roll or pitch instrument: a 180° scale from −45° to +45° with caution / alert zones,
+ * a pointer and live arc, and the truck (rear view for roll, side view for pitch)
+ * tilting against a dashed level line. The angle follows the needle spring.
+ */
+@Composable
+fun Clinometer(
+    kind: ClinometerKind,
+    angleDeg: Float,
+    modifier: Modifier = Modifier,
+) {
+    val caution = if (kind == ClinometerKind.ROLL) 20f else 25f
+    val alert = if (kind == ClinometerKind.ROLL) 30f else 35f
+    val animated = animateFloatAsState(angleDeg, NeedleSpring, label = "clino")
+    val textMeasurer = rememberTextMeasurer()
+
+    val shownDeg by remember(animated) { derivedStateOf { animated.value.roundToInt() } }
+    val valueColor = angleColor(shownDeg.toFloat(), caution, alert).let { if (it == IngweTeal) IngweTextPrimary else it }
+    val caption = when (kind) {
+        ClinometerKind.ROLL -> when { shownDeg > 0 -> "right side down"; shownDeg < 0 -> "left side down"; else -> "level" }
+        ClinometerKind.PITCH -> when { shownDeg > 0 -> "nose up"; shownDeg < 0 -> "nose down"; else -> "level" }
+    }
+
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(IngweSurface)
+            .padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(if (kind == ClinometerKind.ROLL) "Roll" else "Pitch", style = LabelStyle, color = IngweTextSecondary, modifier = Modifier.weight(1f))
+            Text("${abs(shownDeg)}°", style = ReadoutMedium, color = valueColor)
+            Spacer(Modifier.width(6.dp))
+            Text(caption, style = LabelStyle, color = IngweTextTertiary, modifier = Modifier.padding(bottom = 3.dp))
+        }
+        Spacer(
+            Modifier
+                .fillMaxWidth()
+                .height(168.dp)
+                .drawWithCache {
+                    val labelStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum")
+                    val labels = (-45..45 step 15).associateWith { d ->
+                        textMeasurer.measure(abs(d).toString(), labelStyle.copy(color = if (abs(d) >= alert) IngweAlert else IngweTextTertiary))
+                    }
+                    onDrawBehind { drawClinometer(kind, animated.value, caution, alert, labels) }
+                },
+        )
     }
 }
 
@@ -306,6 +335,81 @@ private fun DrawScope.drawSteeringWheel(angleDeg: Float) {
     }
 }
 
+private const val CLINO_LIMIT = 45f
+
+/** Scale, zones, live arc, pointer, level line and tilting truck for a [Clinometer]. */
+private fun DrawScope.drawClinometer(
+    kind: ClinometerKind,
+    deg: Float,
+    caution: Float,
+    alert: Float,
+    labels: Map<Int, TextLayoutResult>,
+) {
+    val cx = size.width / 2f
+    val base = size.height * 0.86f
+    val r = min(size.width / 2f - 14.dp.toPx(), base - 14.dp.toPx())
+    fun ang(d: Float) = 270f + (d.coerceIn(-CLINO_LIMIT, CLINO_LIMIT) / CLINO_LIMIT) * 90f
+    val color = angleColor(deg, caution, alert)
+    val topLeft = Offset(cx - r, base - r)
+    val arcSize = Size(r * 2, r * 2)
+    fun arc(from: Float, to: Float, c: Color, width: Float, cap: StrokeCap = StrokeCap.Butt) {
+        if (to <= from) return
+        drawArc(c, ang(from), ang(to) - ang(from), false, topLeft, arcSize, style = Stroke(width, cap = cap))
+    }
+    fun polar(d: Float, radius: Float): Offset {
+        val a = Math.toRadians(ang(d).toDouble())
+        return Offset(cx + radius * cos(a).toFloat(), base + radius * sin(a).toFloat())
+    }
+
+    // Scale and zones (mirrored both sides)
+    val track = 3.dp.toPx()
+    arc(-CLINO_LIMIT, CLINO_LIMIT, IngweHairline, track)
+    arc(-alert, -caution, IngweCaution.copy(alpha = 0.5f), track)
+    arc(caution, alert, IngweCaution.copy(alpha = 0.5f), track)
+    arc(-CLINO_LIMIT, -alert, IngweAlert.copy(alpha = 0.8f), track)
+    arc(alert, CLINO_LIMIT, IngweAlert.copy(alpha = 0.8f), track)
+
+    // Ticks every 5°, labels every 15°
+    for (d in -45..45 step 5) {
+        val major = d % 15 == 0
+        val tickColor = when {
+            abs(d) >= alert -> IngweAlert
+            major -> IngweTextSecondary
+            else -> IngweTextTertiary
+        }
+        drawLine(
+            tickColor,
+            polar(d.toFloat(), r - (if (major) 12 else 7).dp.toPx()),
+            polar(d.toFloat(), r - 3.dp.toPx()),
+            (if (major) 1.6f else 1f).dp.toPx(),
+        )
+        labels[d]?.let { layout ->
+            val p = polar(d.toFloat(), r - 24.dp.toPx())
+            drawText(layout, topLeft = Offset(p.x - layout.size.width / 2f, p.y - layout.size.height / 2f))
+        }
+    }
+
+    // Live arc from level to the angle, plus a pointer outside the scale
+    val live = deg.coerceIn(-CLINO_LIMIT, CLINO_LIMIT)
+    arc(minOf(0f, live), maxOf(0f, live), color, 5.dp.toPx(), StrokeCap.Round)
+    val tip = polar(live, r + 9.dp.toPx())
+    rotate(ang(live) + 90f, tip) {
+        val pointer = Path().apply {
+            moveTo(tip.x, tip.y + 7.dp.toPx())
+            lineTo(tip.x - 6.dp.toPx(), tip.y - 4.dp.toPx())
+            lineTo(tip.x + 6.dp.toPx(), tip.y - 4.dp.toPx())
+            close()
+        }
+        drawPath(pointer, color)
+    }
+
+    drawLevelLine(base)
+    when (kind) {
+        ClinometerKind.ROLL -> drawTruckRear(cx, base, r * 0.68f, deg, color)
+        ClinometerKind.PITCH -> drawTruckSide(cx, base, r * 1.12f, deg, color)
+    }
+}
+
 /** Dashed level reference across the tile at [groundY]. */
 private fun DrawScope.drawLevelLine(groundY: Float) {
     drawLine(
@@ -321,11 +425,9 @@ private fun DrawScope.drawLevelLine(groundY: Float) {
  * Side view of a double-cab pickup, front to the right. Positive pitch = nose up.
  * Shape is in normalised units: x 0…1 along the truck, y 0…~0.37 up from the ground.
  */
-private fun DrawScope.drawPitchProfile(pitchDeg: Float, color: Color) {
-    val groundY = size.height * 0.88f
-    val len = min(size.width * 0.86f, size.height * 2.0f)
-    val left = size.width / 2f - len / 2f
-    val pivot = Offset(size.width / 2f, groundY)
+private fun DrawScope.drawTruckSide(cx: Float, groundY: Float, len: Float, pitchDeg: Float, color: Color) {
+    val left = cx - len / 2f
+    val pivot = Offset(cx, groundY)
     fun p(x: Float, y: Float) = Offset(left + x * len, groundY - y * len)
     val stroke = 1.5.dp.toPx()
 
@@ -358,7 +460,6 @@ private fun DrawScope.drawPitchProfile(pitchDeg: Float, color: Color) {
         close()
     }
 
-    drawLevelLine(groundY)
     rotate(-pitchDeg, pivot) {
         drawPath(body, color.copy(alpha = 0.16f))
         drawPath(body, color, style = Stroke(stroke, join = StrokeJoin.Round))
@@ -376,10 +477,8 @@ private fun DrawScope.drawPitchProfile(pitchDeg: Float, color: Color) {
  * Rear view of the pickup. Positive roll = right side down.
  * Normalised units: x −0.5…0.5 across, y 0…0.70 up from the ground.
  */
-private fun DrawScope.drawRollProfile(rollDeg: Float, color: Color) {
-    val groundY = size.height * 0.88f
-    val w = min(size.width * 0.62f, size.height * 1.12f)
-    val pivot = Offset(size.width / 2f, groundY)
+private fun DrawScope.drawTruckRear(cx: Float, groundY: Float, w: Float, rollDeg: Float, color: Color) {
+    val pivot = Offset(cx, groundY)
     fun p(x: Float, y: Float) = Offset(pivot.x + x * w, groundY - y * w)
     fun rect(x0: Float, y0: Float, x1: Float, y1: Float) = Rect(p(x0, y1), p(x1, y0))
     val stroke = 1.5.dp.toPx()
@@ -396,7 +495,6 @@ private fun DrawScope.drawRollProfile(rollDeg: Float, color: Color) {
         close()
     }
 
-    drawLevelLine(groundY)
     rotate(rollDeg, pivot) {
         // Tyres sit behind the body
         listOf(rect(-0.49f, 0f, -0.32f, 0.25f), rect(0.32f, 0f, 0.49f, 0.25f)).forEach { r ->
