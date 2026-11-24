@@ -19,9 +19,31 @@
     --alert: #FF5A4F;
     --cool: #6FB6FF;
     --on-accent: #1A1206;
+    --page: #050506;
+  }
+  /*
+   * Light mode (daytime / bright sun). Same roles, re-tuned: signal colours are deeper
+   * so they hold contrast on a light ground — yellow in particular becomes amber-brown.
+   */
+  :root[data-theme="light"] {
+    --bg: #F3F3F1;
+    --surface: #FFFFFF;
+    --surface-high: #E9E9E6;
+    --hairline: #DCDCD8;
+    --text: #141416;
+    --text-2: #55555C;
+    --text-3: #8C8C93;
+    --accent: #E07800;
+    --teal: #0E9E88;
+    --caution: #B97D00;
+    --alert: #D7372D;
+    --cool: #2C7BD6;
+    --on-accent: #FFFFFF;
+    --page: #D9D9D5;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: #050506; }
+  html, body { margin: 0; background: var(--page); transition: background .25s; }
+  .unit { transition: background .25s; }
   body {
     font: 500 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color: var(--text);
@@ -130,6 +152,41 @@
   .clino-head .v { font-size: 24px; }
   .clino-head .u { color: var(--text-3); margin-left: 6px; }
   .clino canvas { display: block; width: 100%; height: 168px; }
+
+  /* Source tag: what we can actually read */
+  .src { font-size: 12px; color: var(--text-3); border: 1px solid var(--hairline); padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+  .mini { font-size: 12px; color: var(--text-2); background: var(--surface-high); padding: 3px 9px; border-radius: 6px; }
+  section.view canvas { display: block; width: 100%; }
+
+  /* Economy */
+  .eco-grid { display: grid; grid-template-columns: 1fr 1.65fr; gap: 12px; }
+  #cv-eco { height: 200px; }
+  #cv-eco-hist { height: 200px; }
+  #cv-tank { height: 74px; }
+  .tank-foot { display: flex; gap: 32px; margin-top: 10px; align-items: baseline; }
+  .tank-foot .k, .trip-grid .k { color: var(--text-2); margin-bottom: 2px; }
+  .tank-foot .v, .trip-grid .v { font-size: 26px; }
+  .tank-foot .v.big { font-size: 36px; font-weight: 300; }
+  .tank-foot .u, .trip-grid .u { color: var(--text-3); margin-left: 5px; }
+  .trip-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 24px; }
+
+  /* Air */
+  #cv-airpath { height: 196px; }
+  .air-grid { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 12px; margin-top: 12px; }
+  #cv-alt, #cv-ambient, #cv-health { height: 128px; }
+  .air-foot { font-size: 14px; display: flex; justify-content: space-between; margin-top: 6px; }
+  .air-foot .k { color: var(--text-2); }
+  .air-foot b { font-weight: 500; }
+
+  /* Engine */
+  .engine-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; align-items: start; }
+  .engine-side { display: flex; flex-direction: column; gap: 12px; }
+  #cv-v6 { height: 236px; }
+  #cv-balance { height: 112px; margin-top: 8px; }
+  #cv-glow { height: 92px; }
+  #cv-rail { height: 118px; }
+  #cv-egr { height: 140px; }
+  #cv-gearbox { height: 150px; }
   .chassis { display: flex; align-items: center; gap: 8px; }
   .chassis .labels { height: 150px; padding: 30px 0 12px; display: flex; flex-direction: column; justify-content: space-between; font-size: 16px; color: var(--text-2); }
   .chassis .labels.left { text-align: right; }
@@ -154,6 +211,7 @@
   .scale span.last { transform: translateX(-100%); }
 
   .split { display: grid; grid-template-columns: 1fr 1.25fr; gap: 32px; align-items: center; }
+  .eco-grid .k, .trip-grid .k, .tank-foot .k, .panel-head .title { font-size: 14px; }
   section[data-view="offroad"] .split { grid-template-columns: 1fr 1.35fr; }
 
   /* Swipe between Cluster / Driveline / Off-road */
@@ -240,9 +298,16 @@
       <button class="tab" role="tab" data-view="cluster" aria-selected="true">Cluster</button>
       <button class="tab" role="tab" data-view="driveline" aria-selected="false">Driveline</button>
       <button class="tab" role="tab" data-view="offroad" aria-selected="false">Off-road</button>
+      <button class="tab" role="tab" data-view="economy" aria-selected="false">Economy</button>
+      <button class="tab" role="tab" data-view="air" aria-selected="false">Air</button>
+      <button class="tab" role="tab" data-view="engine" aria-selected="false">Engine</button>
     </nav>
 
     <div class="actions">
+      <div class="seg" role="group" aria-label="Theme">
+        <button data-theme-btn="dark" aria-pressed="true">Dark</button>
+        <button data-theme-btn="light" aria-pressed="false">Light</button>
+      </div>
       <div class="seg" role="group" aria-label="Boost unit">
         <button data-unit="bar" aria-pressed="true">bar</button>
         <button data-unit="psi" aria-pressed="false">psi</button>
@@ -270,6 +335,7 @@
       <button data-t="100">Full</button>
     </div>
     <div class="seg"><button id="sweepBtn" aria-pressed="false">Sweep</button></div>
+    <div class="seg"><button id="coldBtn" aria-pressed="false">Cold start</button></div>
   </div>
 
   <main>
@@ -314,11 +380,8 @@
             <div class="meter" id="m-atf"></div>
           </div>
           <div class="panel">
-            <div class="panel-head"><span class="title">Engine temperatures</span></div>
-            <div class="pair">
-              <div class="meter" id="m-cool"></div>
-              <div class="meter" id="m-oil"></div>
-            </div>
+            <div class="panel-head"><span class="title">Gearbox</span><span class="src">VW UDS · unconfirmed</span></div>
+            <canvas id="cv-gearbox"></canvas>
           </div>
         </div>
       </div>
@@ -358,6 +421,90 @@
               </div>
               <div class="meter" id="m-slip"></div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Economy -->
+    <section class="view" data-view="economy" hidden>
+      <div class="eco-grid">
+        <div class="panel eco-now">
+          <div class="panel-head"><span class="title">Consumption now</span><span class="src">OBD-II</span></div>
+          <canvas id="cv-eco"></canvas>
+        </div>
+        <div class="panel eco-hist">
+          <div class="panel-head"><span class="title">Last 30 seconds</span><span class="src" id="ecoHistUnit">L/100 km</span></div>
+          <canvas id="cv-eco-hist"></canvas>
+        </div>
+        <div class="panel eco-tank">
+          <div class="panel-head"><span class="title">Fuel</span><span class="src">OBD-II</span></div>
+          <canvas id="cv-tank"></canvas>
+          <div class="tank-foot">
+            <div><div class="k">Range</div><span class="v big num" id="range">–</span><span class="u">km</span></div>
+            <div><div class="k">In tank</div><span class="v num" id="tankL">–</span><span class="u">L</span></div>
+          </div>
+        </div>
+        <div class="panel eco-trip">
+          <div class="panel-head"><span class="title">This trip</span><button class="mini" id="resetTrip">Reset</button></div>
+          <div class="trip-grid">
+            <div><div class="k">Distance</div><span class="v num" id="tDist">–</span><span class="u">km</span></div>
+            <div><div class="k">Time</div><span class="v num" id="tTime">–</span></div>
+            <div><div class="k">Average</div><span class="v num" id="tAvg">–</span><span class="u">L/100 km</span></div>
+            <div><div class="k">Avg speed</div><span class="v num" id="tSpeed">–</span><span class="u">km/h</span></div>
+            <div><div class="k">Fuel used</div><span class="v num" id="tUsed">–</span><span class="u">L</span></div>
+            <div><div class="k">Idle time</div><span class="v num" id="tIdle">–</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Air -->
+    <section class="view" data-view="air" hidden>
+      <div class="panel airpath">
+        <div class="panel-head"><span class="title">Air path</span><span class="src">OBD-II · compressor-out temperature estimated</span></div>
+        <canvas id="cv-airpath"></canvas>
+      </div>
+      <div class="air-grid">
+        <div class="panel">
+          <div class="panel-head"><span class="title">Altitude</span><span class="src">OBD-II · from barometer</span></div>
+          <canvas id="cv-alt"></canvas>
+          <div class="air-foot">
+            <span><span class="k">Barometer</span> <b class="num" id="baro">–</b></span>
+            <span><span class="k">Air density</span> <b class="num" id="density">–</b></span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="title">Outside</span><span class="src">OBD-II</span></div>
+          <canvas id="cv-ambient"></canvas>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="title">Airflow health</span><span class="src">OBD-II · expected MAF via VW UDS, unconfirmed</span></div>
+          <canvas id="cv-health"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Engine: glow plugs & injectors -->
+    <section class="view" data-view="engine" hidden>
+      <div class="engine-grid">
+        <div class="panel">
+          <div class="panel-head"><span class="title">3.0 V6 TDI · cylinders</span><span class="src">VW UDS · unconfirmed</span></div>
+          <canvas id="cv-v6"></canvas>
+          <canvas id="cv-balance"></canvas>
+        </div>
+        <div class="engine-side">
+          <div class="panel">
+            <div class="panel-head"><span class="title">Glow system</span><span class="status" id="glowStatus"></span></div>
+            <canvas id="cv-glow"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="title">Common rail</span><span class="src">OBD-II</span></div>
+            <canvas id="cv-rail"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="title">EGR valve</span><span class="src">OBD-II</span></div>
+            <canvas id="cv-egr"></canvas>
           </div>
         </div>
       </div>
@@ -410,11 +557,11 @@
 
   <div class="intro" id="intro" title="Tap to skip">
     <svg class="logo" id="introLogo" viewBox="0 0 108 108">
-      <path d="M37.03,70.97 A24,24 0 1,1 70.97,70.97" stroke="#EDEDEF" stroke-opacity=".2" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      <path d="M77.93,55.88 A24,24 0 0,1 70.97,70.97" stroke="#FF5A4F" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      <path d="M37.03,70.97 A24,24 0 1,1 74.66,41.79" stroke="#FFA43A" stroke-width="6" stroke-linecap="round" fill="none"/>
-      <path d="M49.70,56.55 L71.22,43.82" stroke="#EDEDEF" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="54" cy="54" r="5.5" fill="#1C1C1F"/><circle cx="54" cy="54" r="2.5" fill="#3CCFB8"/>
+      <path d="M37.03,70.97 A24,24 0 1,1 70.97,70.97" stroke="var(--text)" stroke-opacity=".2" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <path d="M77.93,55.88 A24,24 0 0,1 70.97,70.97" stroke="var(--alert)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+      <path d="M37.03,70.97 A24,24 0 1,1 74.66,41.79" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" fill="none"/>
+      <path d="M49.70,56.55 L71.22,43.82" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="54" cy="54" r="5.5" fill="var(--surface-high)"/><circle cx="54" cy="54" r="2.5" fill="var(--teal)"/>
     </svg>
     <div class="word" id="introWord">INGWE</div>
   </div>
@@ -437,11 +584,26 @@
 
 <script>
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const C = {
-  text: css('--text'), text2: css('--text-2'), text3: css('--text-3'), hair: css('--hairline'),
-  surfaceHigh: css('--surface-high'), accent: css('--accent'), teal: css('--teal'), caution: css('--caution'),
-  alert: css('--alert'), cool: css('--cool'),
-};
+// Canvas colours, re-read from the CSS tokens whenever the theme changes.
+const C = {};
+function readColors() {
+  Object.assign(C, {
+    text: css('--text'), text2: css('--text-2'), text3: css('--text-3'), hair: css('--hairline'),
+    surfaceHigh: css('--surface-high'), accent: css('--accent'), teal: css('--teal'), caution: css('--caution'),
+    alert: css('--alert'), cool: css('--cool'),
+  });
+}
+readColors();
+
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll('[data-theme-btn]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeBtn === theme)));
+  try { localStorage.setItem('ingwe-theme', theme); } catch (e) {}
+  readColors();
+  document.querySelectorAll('.meter').forEach(m => { delete m.dataset.scale; }); // scale labels embed colours
+  render();
+  renderFaults();
+}
 const withAlpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
 
 const state = { unit: 'bar', throttle: 0.55, view: 'cluster', peakKPa: null, filter: 'all', expanded: null, sweep: 0 };
@@ -458,10 +620,10 @@ const SAMPLE = [
     desc: 'Measured EGR flow across the differential pressure sensor is below specification.',
     ff: [['Engine speed','1,750 rpm'],['Vehicle speed','68 km/h'],['MAF actual','480 mg/str'],['EGR duty','65 %']],
     causes: ['Carbon build-up in the EGR valve or cooler','EGR cooler bypass flap stuck or leaking','Faulty MAF or EGR differential pressure sensor'] },
-  { code: 'P2002', title: 'DPF efficiency below threshold', system: 'Exhaust aftertreatment', sev: 'pending',
-    desc: 'DPF differential pressure suggests poor soot trapping or ash saturation.',
-    ff: [['Soot mass','24.5 g'],['Diff. pressure','14 mbar'],['Exhaust temp','310 °C']],
-    causes: ['Regenerations interrupted by frequent short trips','Pinched or cracked DPF pressure sensor hoses','Ash load near the DPF service limit'] },
+  { code: 'P0671', title: 'Cylinder 1 glow plug circuit', system: 'Glow system', sev: 'pending',
+    desc: 'The glow plug control module saw an open circuit on cylinder 1 during pre-glow.',
+    ff: [['Coolant','4 °C'],['Battery','12.1 V'],['Engine speed','0 rpm']],
+    causes: ['Glow plug element burnt out (check resistance, normally ~0.6 Ω)','Loose or corroded glow plug connector','Wiring fault between plug and glow control module'] },
 ];
 let faults = [...SAMPLE];
 
@@ -482,6 +644,38 @@ function sim(t) {
     egt: 310 + t * 470, cac: 30 + t * 28, vgt: 35 + t * 55, torque: 110 + t * 470,
     gear: 'D' + (gi === -1 ? 8 : gi + 1), slip: t > 0.9, atf: 82 + t * 14,
     steer: t * 30 - 15, pitch: t * 18 - 4, wheelSlip: t * 8.5,
+    ...simAir(t), ...simEngine(t),
+  };
+}
+
+// Air: ambient, altitude (from the barometer), airflow along the intake path
+function simAir(t) {
+  const ambient = 24, baroKPa = 83.4; // ~1,600 m — Gauteng
+  const altitude = 44330 * (1 - Math.pow(baroKPa / 101.325, 0.1903));
+  const density = (baroKPa / 101.325) * (288.15 / (273.15 + ambient)) * 100;
+  const mafAct = 9 + t * 215;                 // g/s
+  const mafExp = mafAct * (1.02 + t * 0.03);  // ECU's expected airflow (VW UDS)
+  const cac = 30 + t * 28;
+  return {
+    ambient, baroKPa, altitude, density, mafAct, mafExp,
+    compOut: ambient + 12 + t * 125,          // estimated from pressure ratio
+    iat: cac + 2, mapKPa: 95 + t * 165,
+  };
+}
+
+// Engine internals: rail, EGR, injector corrections, glow system
+function simEngine(t) {
+  const now = performance.now() / 1000;
+  const sinceCold = state.coldAt ? now - state.coldAt : Infinity;
+  const glowPhase = sinceCold < 6 ? 'pre' : sinceCold < 6 + 180 ? 'after' : 'off';
+  const wobble = i => Math.sin(now * 0.7 + i * 1.9) * 0.15;
+  return {
+    rail: 290 + t * 1480, railTarget: (290 + t * 1480) * 1.012,
+    egr: Math.max(0, 45 - t * 55),
+    inj: [0.4, -0.8, 1.1, -0.3, 2.3, -0.6].map((v, i) => v + wobble(i)), // mg/stroke correction
+    glowPhase, glowLeft: glowPhase === 'pre' ? 6 - sinceCold : glowPhase === 'after' ? 186 - sinceCold : 0,
+    glowOhms: [null, 0.62, 0.58, 0.61, 0.63, 0.60],                      // cyl 1 open circuit (P0671)
+    coldCoolant: glowPhase === 'off' ? null : Math.min(60, 12 + sinceCold * 0.25),
   };
 }
 const boostFrom = (kpa, unit) => { const bar = (kpa - 100) / 100; return unit === 'bar' ? bar : bar * 14.5038; };
@@ -783,6 +977,461 @@ function drawChassis(wheels, rearLocked) {
 
 const statusHtml = (text, color) => `<span class="dot" style="background:${color}"></span>${text}`;
 
+/* ── Shared canvas text helper ──────────────────────────────────────────── */
+function txt(ctx, s, x, y, { size = 12, weight = 500, color = C.text2, align = 'left', base = 'alphabetic' } = {}) {
+  ctx.font = `${weight} ${size + 1}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
+  ctx.fillText(s, x, y);
+}
+const ecoColor = v => v >= 20 ? C.alert : v >= 12 ? C.caution : C.teal;
+
+/* ── Economy (mirrors EconomyPage in the app) ───────────────────────────── */
+const trip = { dist: 182.4, time: 9660, used: 19.6, idle: 1260 };
+const ecoHist = [];
+setInterval(() => {                         // integrate the trip and sample history twice a second
+  const car = sim(state.throttle), dt = 0.5;
+  trip.time += dt; trip.dist += car.speed * dt / 3600; trip.used += car.fuel * dt / 3600;
+  if (car.speed < 3) trip.idle += dt;
+  ecoHist.push(car.speed > 5 ? car.fuel / car.speed * 100 : null);
+  if (ecoHist.length > 60) ecoHist.shift();
+}, 500);
+const tripAvg = () => trip.dist > 0.1 ? trip.used / trip.dist * 100 : 0;
+const fmtTime = s => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}`;
+
+// Half-ring: instant L/100 km (or L/h at idle) with the trip average as a white bug
+function drawEco(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-eco'));
+  const moving = car.speed > 5;
+  const MAX = moving ? 30 : 5;
+  const raw = moving ? car.fuel / car.speed * 100 : car.fuel;
+  const v = sweepTowards(spring('eco:' + moving, raw, MAX), MAX);
+  const cx = w / 2, cy = h * 0.82, R = Math.min(w / 2 - 20, h * 0.74);
+  const ang = x => Math.PI + (Math.max(0, Math.min(MAX, x)) / MAX) * Math.PI;
+  const arc = (a, b, col, wd, cap = 'butt') => { if (b <= a) return; ctx.beginPath(); ctx.arc(cx, cy, R, ang(a), ang(b)); ctx.strokeStyle = col; ctx.lineWidth = wd; ctx.lineCap = cap; ctx.stroke(); };
+  arc(0, MAX, C.hair, 10);
+  if (moving) { arc(12, 20, withAlpha(C.caution, 0.35), 10); arc(20, MAX, withAlpha(C.alert, 0.35), 10); }
+  arc(0, v, moving ? ecoColor(v) : C.cool, 10, 'round');
+  const step = moving ? 5 : 1;
+  for (let x = 0; x <= MAX; x += step) {
+    const a = ang(x);
+    txt(ctx, String(x), cx + (R - 24) * Math.cos(a), cy + (R - 24) * Math.sin(a), { size: 11, color: C.text3, align: 'center', base: 'middle' });
+  }
+  if (moving) {                              // trip average bug
+    const a = ang(tripAvg());
+    ctx.beginPath(); ctx.moveTo(cx + (R - 9) * Math.cos(a), cy + (R - 9) * Math.sin(a)); ctx.lineTo(cx + (R + 9) * Math.cos(a), cy + (R + 9) * Math.sin(a));
+    ctx.strokeStyle = C.text; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
+  }
+  txt(ctx, v.toFixed(1), cx, cy - 18, { size: 44, weight: 300, color: C.text, align: 'center' });
+  txt(ctx, moving ? 'L/100 km' : 'L/h · idling', cx, cy + 2, { size: 13, color: C.text2, align: 'center' });
+  txt(ctx, `trip avg ${tripAvg().toFixed(1)}`, cx, cy + 20, { size: 12, color: C.text3, align: 'center' });
+}
+
+// Rolling bars with gridline numbers and the trip average line
+function drawEcoHist() {
+  const { ctx, w, h } = prep(document.getElementById('cv-eco-hist'));
+  const left = 30, top = 6, bottom = h - 18, MAX = 30, N = 60;
+  const y = v => bottom - (Math.min(MAX, v) / MAX) * (bottom - top);
+  for (const g of [0, 10, 20, 30]) {
+    ctx.beginPath(); ctx.moveTo(left, y(g)); ctx.lineTo(w, y(g)); ctx.strokeStyle = C.hair; ctx.lineWidth = 1; ctx.stroke();
+    txt(ctx, String(g), left - 8, y(g), { size: 11, color: C.text3, align: 'right', base: 'middle' });
+  }
+  const bw = (w - left) / N;
+  ecoHist.forEach((v, i) => {
+    const x = left + (N - ecoHist.length + i) * bw;
+    if (v == null) {                          // idle: a small blue dot on the baseline
+      ctx.fillStyle = withAlpha(C.cool, 0.7); ctx.beginPath(); ctx.arc(x + bw / 2, bottom - 3, 2, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    const sv = sweepTowards(v, MAX);
+    ctx.fillStyle = withAlpha(ecoColor(sv), i === ecoHist.length - 1 ? 1 : 0.7);
+    ctx.beginPath(); ctx.roundRect(x + 1, y(sv), Math.max(1, bw - 2), bottom - y(sv), 2); ctx.fill();
+  });
+  const avg = tripAvg();
+  ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = C.text; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(left, y(avg)); ctx.lineTo(w, y(avg)); ctx.stroke(); ctx.restore();
+  {                                           // label on a pill so it reads over the bars
+    const label = `trip avg ${avg.toFixed(1)}`;
+    ctx.font = '500 11px system-ui, sans-serif';
+    const tw = ctx.measureText(label).width + 12, ly = Math.max(top + 9, y(avg) - 12);
+    ctx.fillStyle = css('--surface'); ctx.beginPath(); ctx.roundRect(left + 6, ly - 9, tw, 18, 9); ctx.fill();
+    ctx.strokeStyle = C.hair; ctx.lineWidth = 1; ctx.stroke();
+    txt(ctx, label, left + 12, ly, { size: 11, color: C.text, base: 'middle' });
+  }
+  txt(ctx, '30 s ago', left, h - 2, { size: 11, color: C.text3 });
+  txt(ctx, 'now', w - 2, h - 2, { size: 11, color: C.text3, align: 'right' });
+}
+
+// Fuel tank: a capsule with a gently moving liquid surface and quarter marks
+function drawTank(level) {
+  const { ctx, w, h } = prep(document.getElementById('cv-tank'));
+  const x0 = 4, y0 = 8, tw = w - 8, th = h - 26, r = th / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(x0, y0, tw, th, r); ctx.clip();
+  ctx.fillStyle = C.surfaceHigh; ctx.fillRect(x0, y0, tw, th);
+  const fillW = tw * level, t = performance.now() / 900;
+  ctx.beginPath(); ctx.moveTo(x0, y0 + th);
+  ctx.lineTo(x0, y0);
+  ctx.lineTo(x0 + fillW - 6, y0);
+  for (let yy = 0; yy <= th; yy += 2) ctx.lineTo(x0 + fillW + Math.sin(t + yy / 7) * 3, y0 + yy); // sloshing edge
+  ctx.lineTo(x0, y0 + th); ctx.closePath();
+  ctx.fillStyle = withAlpha(level < 0.15 ? C.alert : C.teal, 0.85); ctx.fill();
+  ctx.restore();
+  ctx.beginPath(); ctx.roundRect(x0, y0, tw, th, r); ctx.strokeStyle = C.hair; ctx.lineWidth = 1.5; ctx.stroke();
+  ['E', '¼', '½', '¾', 'F'].forEach((m, i) => {
+    const x = x0 + r + (tw - 2 * r) * (i / 4);
+    txt(ctx, m, x, h - 2, { size: 11, color: C.text3, align: 'center' });
+  });
+  txt(ctx, `${Math.round(level * 100)} %`, x0 + 14, y0 + th / 2, { size: 15, weight: 600, color: '#FFFFFF', base: 'middle' });
+}
+
+/* ── Air path (mirrors AirPathDiagram in the app) ───────────────────────────
+ * Ambient → MAF → turbo → intercooler → manifold → engine. Particles move at the
+ * measured airflow; their colour follows the air temperature (cool, heated by the
+ * compressor, cooled by the intercooler).
+ */
+const airParticles = Array.from({ length: 70 }, (_, i) => ({ p: i / 70, lane: (i * 37 % 7) / 7 - 0.5 }));
+let turboAngle = 0, lastAirT = performance.now();
+const tempColor = tc => tc >= 90 ? C.alert : tc >= 55 ? C.caution : tc >= 35 ? C.teal : C.cool;
+function drawAirPath(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-airpath'));
+  const now = performance.now(), dt = Math.min(0.05, (now - lastAirT) / 1000); lastAirT = now;
+  const y = 62, x0 = 34, x1 = w - 40;
+  const st = [0, 0.19, 0.4, 0.6, 0.8, 1].map(f => x0 + (x1 - x0) * f);   // station x positions
+  const temps = [car.ambient, car.ambient + 1, car.compOut, car.cac, car.iat, car.iat];
+  const tempAt = x => {                      // temperature along the pipe
+    for (let i = 0; i < st.length - 1; i++) if (x <= st[i + 1]) {
+      const f = (x - st[i]) / (st[i + 1] - st[i]); return temps[i] + (temps[i + 1] - temps[i]) * f;
+    }
+    return temps[temps.length - 1];
+  };
+  // pipe with a temperature gradient
+  const grad = ctx.createLinearGradient(st[0], 0, st[5], 0);
+  st.forEach((x, i) => grad.addColorStop((x - st[0]) / (st[5] - st[0]), withAlpha(tempColor(temps[i]), 0.22)));
+  ctx.beginPath(); ctx.moveTo(st[0], y); ctx.lineTo(st[5], y); ctx.strokeStyle = grad; ctx.lineWidth = 26; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(st[0], y); ctx.lineTo(st[5], y); ctx.strokeStyle = withAlpha(C.text3, 0.25); ctx.lineWidth = 1; ctx.stroke();
+
+  // particles: speed follows MAF
+  const speed = 0.04 + car.mafAct / 900;
+  for (const pt of airParticles) {
+    pt.p = (pt.p + speed * dt) % 1;
+    const x = st[0] + (st[5] - st[0]) * pt.p, yy = y + pt.lane * 16;
+    ctx.fillStyle = tempColor(tempAt(x)); ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(x, yy, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // station icons
+  const icon = (x, draw) => { ctx.save(); ctx.translate(x, y); draw(); ctx.restore(); };
+  const plate = r => { ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = css('--surface'); ctx.fill(); ctx.strokeStyle = C.hair; ctx.lineWidth = 1.5; ctx.stroke(); };
+  icon(st[0], () => { plate(22); ctx.strokeStyle = C.cool; ctx.lineWidth = 2; for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(-11, k * 7); ctx.bezierCurveTo(-4, k * 7 - 5, 2, k * 7 + 5, 11, k * 7); ctx.stroke(); } });
+  icon(st[1], () => { plate(20); ctx.strokeStyle = C.text2; ctx.lineWidth = 2; ctx.strokeRect(-9, -9, 18, 18); ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.stroke(); txt(ctx, 'MAF', 0, -13, { size: 9, color: C.text3, align: 'center' }); });
+  turboAngle += dt * (2 + Math.max(0, boostFrom(car.mapKPa, 'bar')) * 22);       // spins faster with boost
+  icon(st[2], () => {
+    plate(30);
+    ctx.rotate(turboAngle); ctx.strokeStyle = tempColor(car.compOut); ctx.lineWidth = 2.2;
+    for (let k = 0; k < 9; k++) { ctx.rotate(Math.PI * 2 / 9); ctx.beginPath(); ctx.moveTo(5, 0); ctx.quadraticCurveTo(14, 4, 22, -4); ctx.stroke(); }
+    ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+  });
+  icon(st[3], () => {
+    ctx.beginPath(); ctx.roundRect(-26, -24, 52, 48, 6); ctx.fillStyle = css('--surface'); ctx.fill(); ctx.strokeStyle = C.hair; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = withAlpha(C.teal, 0.8); ctx.lineWidth = 1.5;
+    for (let k = -20; k <= 20; k += 5) { ctx.beginPath(); ctx.moveTo(k, -18); ctx.lineTo(k, 18); ctx.stroke(); }
+  });
+  icon(st[4], () => { plate(20); ctx.strokeStyle = C.text2; ctx.lineWidth = 2; for (const dy of [-8, 0, 8]) { ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(9, dy); ctx.stroke(); } });
+  icon(st[5], () => {
+    ctx.fillStyle = css('--surface'); ctx.strokeStyle = C.text2; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-20, -20, 18, 34, 4); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(2, -20, 18, 34, 4); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-16, 18); ctx.lineTo(0, 24); ctx.lineTo(16, 18); ctx.stroke();
+  });
+
+  // labels and readings
+  const boost = boostFrom(car.mapKPa, state.unit);
+  const rows = [
+    ['Outside', [[`${car.ambient.toFixed(0)} °C`, tempColor(car.ambient)], [`${car.baroKPa.toFixed(1)} kPa`]]],
+    ['Mass airflow', [[`${car.mafAct.toFixed(0)} g/s`, C.text]]],
+    ['Turbo', [[`${fmtBoost(boost, state.unit)} ${state.unit}`, C.accent], [`~${car.compOut.toFixed(0)} °C out`, tempColor(car.compOut)]]],
+    ['Intercooler', [[`${car.cac.toFixed(0)} °C out`, tempColor(car.cac)], [`−${(car.compOut - car.cac).toFixed(0)} °C`]]],
+    ['Manifold', [[`${car.mapKPa.toFixed(0)} kPa`, C.text], [`${car.iat.toFixed(0)} °C`, tempColor(car.iat)]]],
+    ['Engine', [[`${(Math.round(car.rpm / 10) * 10).toLocaleString('en-US')} rpm`, C.text]]],
+  ];
+  rows.forEach(([name, vals], i) => {
+    const x = st[i], align = i === 0 ? 'left' : i === 5 ? 'right' : 'center', ax = i === 0 ? x - 22 : i === 5 ? x + 22 : x;
+    txt(ctx, name, ax, y + 52, { size: 12, color: C.text2, align });
+    vals.forEach(([s, col], k) => txt(ctx, s, ax, y + 74 + k * 20, { size: k === 0 ? 16 : 13, weight: k === 0 ? 500 : 400, color: col ?? C.text3, align }));
+  });
+}
+
+// Altitude: mountain profile with the truck's height marked against a metre scale
+function drawAltitude(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-alt'));
+  const left = 38, top = 8, bottom = h - 6, MAX = 3500;
+  const y = m => bottom - (m / MAX) * (bottom - top);
+  for (const m of [0, 1000, 2000, 3000]) txt(ctx, m === 0 ? '0' : `${m / 1000}k`, left - 8, y(m), { size: 11, color: C.text3, align: 'right', base: 'middle' });
+  const ridge = [[0, 300], [0.12, 900], [0.24, 650], [0.38, 1500], [0.5, 1250], [0.62, 2300], [0.74, 1800], [0.86, 2900], [1, 2100]];
+  ctx.beginPath(); ctx.moveTo(left, bottom);
+  ridge.forEach(([f, m]) => ctx.lineTo(left + (w - left) * f, y(m)));
+  ctx.lineTo(w, bottom); ctx.closePath();
+  ctx.fillStyle = withAlpha(C.teal, 0.12); ctx.fill(); ctx.strokeStyle = withAlpha(C.teal, 0.6); ctx.lineWidth = 1.5; ctx.stroke();
+  const alt = sweepTowards(spring('alt', car.altitude, 3500), 3500);
+  ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = C.accent; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(left, y(alt)); ctx.lineTo(w, y(alt)); ctx.stroke(); ctx.restore();
+  ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(left + (w - left) * 0.44, y(alt), 5, 0, Math.PI * 2); ctx.fill();
+  txt(ctx, `${Math.round(alt).toLocaleString('en-US')} m`, w - 2, y(alt) - 8, { size: 22, weight: 400, color: C.text, align: 'right' });
+}
+
+// Outside: big ambient temperature and a -10…50 °C strip showing how much the intake air is heat-soaked
+function drawAmbient(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-ambient'));
+  txt(ctx, `${car.ambient.toFixed(0)}°`, 0, 54, { size: 52, weight: 300, color: C.text });
+  txt(ctx, 'ambient', 4, 74, { size: 12, color: C.text2 });
+  const sx = 0, sw = w, sy = h - 30, MIN = -10, MAX = 50;
+  const x = t => sx + ((Math.max(MIN, Math.min(MAX, t)) - MIN) / (MAX - MIN)) * sw;
+  const g = ctx.createLinearGradient(sx, 0, sx + sw, 0);
+  g.addColorStop(0, C.cool); g.addColorStop(0.45, C.teal); g.addColorStop(0.75, C.caution); g.addColorStop(1, C.alert);
+  ctx.globalAlpha = 0.85; ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(sx, sy, sw, 6, 3); ctx.fill(); ctx.globalAlpha = 1;
+  const mark = (t, label, up) => {
+    const xx = x(t);
+    ctx.fillStyle = C.text; ctx.beginPath();
+    if (up) { ctx.moveTo(xx, sy - 2); ctx.lineTo(xx - 5, sy - 10); ctx.lineTo(xx + 5, sy - 10); } else { ctx.moveTo(xx, sy + 8); ctx.lineTo(xx - 5, sy + 16); ctx.lineTo(xx + 5, sy + 16); }
+    ctx.fill();
+    txt(ctx, label, Math.min(w - 2, Math.max(2, xx)), up ? sy - 14 : sy + 28, { size: 11, color: C.text2, align: xx > w - 60 ? 'right' : xx < 60 ? 'left' : 'center' });
+  };
+  mark(car.ambient, `outside ${car.ambient.toFixed(0)}°`, true);
+  mark(car.iat, `intake ${car.iat.toFixed(0)}°`, false);
+  txt(ctx, `+${(car.iat - car.ambient).toFixed(0)}° heat soak`, w, 30, { size: 13, color: car.iat - car.ambient > 25 ? C.caution : C.text2, align: 'right' });
+}
+
+// Airflow health: ring score from MAF actual vs expected, plus boost vs target
+function drawHealth(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-health'));
+  const score = Math.max(0, Math.min(100, (car.mafAct / car.mafExp) * 100));
+  const shown = sweepTowards(spring('health', score, 100), 100);
+  const col = shown >= 95 ? C.teal : shown >= 85 ? C.caution : C.alert;
+  const cx = 56, cy = h / 2, R = 46;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.strokeStyle = C.hair; ctx.lineWidth = 9; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + (shown / 100) * Math.PI * 2); ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.stroke();
+  txt(ctx, `${shown.toFixed(0)}`, cx, cy + 4, { size: 26, weight: 400, color: C.text, align: 'center' });
+  txt(ctx, shown >= 95 ? 'Good' : shown >= 85 ? 'Check' : 'Poor', cx, cy + 22, { size: 11, color: col, align: 'center' });
+  const bx = 124, lines = [
+    ['MAF vs expected', `${car.mafAct.toFixed(0)} / ${car.mafExp.toFixed(0)} g/s`],
+    ['Boost vs target', `${fmtBoost(boostFrom(car.boostKPa, state.unit) - boostFrom(car.targetKPa, state.unit), state.unit)} ${state.unit}`],
+    ['Charge air', `${car.cac.toFixed(0)} °C`],
+  ];
+  lines.forEach(([k, v], i) => {
+    txt(ctx, k, bx, 26 + i * 38, { size: 12, color: C.text2 });
+    txt(ctx, v, bx, 44 + i * 38, { size: 15, color: C.text });
+  });
+}
+
+/* ── Engine: V6 cylinders, injector balance, glow plugs ─────────────────── */
+const injColor = v => Math.abs(v) >= 2.5 ? C.alert : Math.abs(v) >= 2 ? C.caution : C.teal;
+// Top view of the V6: two banks, each cylinder shows its glow plug (centre) and
+// injector correction (ring arc from 12 o'clock; clockwise = adding fuel)
+function drawV6(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-v6'));
+  const cx = w / 2 + 24, R = Math.min(46, h * 0.19, w / 11), gap = R * 2.55;
+  const glowing = car.glowPhase !== 'off', pulse = 0.55 + 0.45 * Math.sin(performance.now() / 260);
+  // block outline and crank valley
+  ctx.beginPath(); ctx.roundRect(cx - gap * 1.95, 14, gap * 3.9, h - 28, 22); ctx.fillStyle = withAlpha(C.text3, 0.06); ctx.fill(); ctx.strokeStyle = C.hair; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.save(); ctx.setLineDash([3, 5]); ctx.strokeStyle = C.hair; ctx.beginPath(); ctx.moveTo(cx - gap * 1.7, h / 2); ctx.lineTo(cx + gap * 1.7, h / 2); ctx.stroke(); ctx.restore();
+  txt(ctx, 'Bank 1', cx - gap * 1.95 - 12, h / 2 - R - 14, { size: 12, color: C.text3, align: 'right', base: 'middle' });
+  txt(ctx, 'Bank 2', cx - gap * 1.95 - 12, h / 2 + R + 14, { size: 12, color: C.text3, align: 'right', base: 'middle' });
+  const pos = [0, 1, 2, 3, 4, 5].map(i => {
+    const bank = i < 3 ? 0 : 1, k = i % 3;
+    return [cx + (k - 1) * gap + (bank ? gap * 0.35 : -gap * 0.35), bank ? h / 2 + R + 14 : h / 2 - R - 14]; // banks are staggered
+  });
+  pos.forEach(([x, y], i) => {
+    const corr = sweepTowards(spring('inj' + i, car.inj[i], 6), 3);
+    const open = car.glowOhms[i] == null;
+    // cylinder bore
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fillStyle = css('--surface'); ctx.fill(); ctx.strokeStyle = C.hair; ctx.lineWidth = 6; ctx.stroke();
+    // injector correction arc (±3 mg = ±150°)
+    const sweep = (Math.max(-3, Math.min(3, corr)) / 3) * (Math.PI * 5 / 6);
+    ctx.beginPath(); ctx.arc(x, y, R, -Math.PI / 2 + Math.min(0, sweep), -Math.PI / 2 + Math.max(0, sweep));
+    ctx.strokeStyle = injColor(corr); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+    // glow plug
+    if (glowing && !open) {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R * 0.75);
+      g.addColorStop(0, withAlpha(C.accent, 0.95 * pulse)); g.addColorStop(1, withAlpha(C.accent, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 0.75, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fillStyle = open ? C.alert : glowing ? C.accent : C.text3; ctx.fill();
+    if (open) { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 10, y - 10); ctx.lineTo(x + 10, y + 10); ctx.moveTo(x + 10, y - 10); ctx.lineTo(x - 10, y + 10); ctx.stroke(); }
+    txt(ctx, String(i + 1), x, y - 14, { size: 13, weight: 600, color: C.text2, align: 'center' });
+    txt(ctx, `${corr >= 0 ? '+' : ''}${corr.toFixed(1)}`, x, y + 24, { size: 12, color: injColor(corr), align: 'center' });
+  });
+}
+
+// Injector balance: one bar per cylinder around zero, with ±2 mg caution lines
+function drawBalance(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-balance'));
+  const left = 32, top = 18, bottom = h - 18, mid = (top + bottom) / 2, MAX = 3;
+  const y = v => mid - (Math.max(-MAX, Math.min(MAX, v)) / MAX) * (bottom - top) / 2;
+  txt(ctx, 'Injector correction · mg/stroke', left, 11, { size: 11, color: C.text3 });
+  for (const g of [-2, 0, 2]) {
+    ctx.save(); if (g) ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = g ? withAlpha(C.caution, 0.6) : C.hair; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(left, y(g)); ctx.lineTo(w, y(g)); ctx.stroke(); ctx.restore();
+    txt(ctx, (g > 0 ? '+' : '') + g, left - 8, y(g), { size: 11, color: g ? C.caution : C.text3, align: 'right', base: 'middle' });
+  }
+  const cw = (w - left) / 6;
+  car.inj.forEach((raw, i) => {
+    const v = springs.get('inj' + i)?.x ?? raw;
+    const x = left + i * cw + cw * 0.3, bw = cw * 0.4;
+    ctx.fillStyle = injColor(v);
+    ctx.beginPath(); ctx.roundRect(x, Math.min(y(v), mid), bw, Math.abs(y(v) - mid), 3); ctx.fill();
+    txt(ctx, `cyl ${i + 1}`, x + bw / 2, h - 2, { size: 11, color: C.text3, align: 'center' });
+  });
+}
+
+// Glow plugs: resistance per plug and the glow phase timer
+function drawGlow(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-glow'));
+  const cw = w / 6;
+  car.glowOhms.forEach((ohm, i) => {
+    const x = i * cw + 4, open = ohm == null;
+    ctx.beginPath(); ctx.roundRect(x, 4, cw - 8, 46, 8);
+    ctx.fillStyle = open ? withAlpha(C.alert, 0.12) : C.surfaceHigh; ctx.fill();
+    txt(ctx, `${i + 1}`, x + 8, 20, { size: 11, color: C.text3 });
+    txt(ctx, open ? 'open' : `${ohm.toFixed(2)} Ω`, x + (cw - 8) / 2, 40, { size: 13, weight: 500, color: open ? C.alert : C.text, align: 'center' });
+  });
+  const total = car.glowPhase === 'pre' ? 6 : 180;
+  const frac = car.glowPhase === 'off' ? 0 : car.glowLeft / total;
+  ctx.fillStyle = C.hair; ctx.beginPath(); ctx.roundRect(4, h - 18, w - 8, 4, 2); ctx.fill();
+  if (frac > 0) { ctx.fillStyle = C.accent; ctx.beginPath(); ctx.roundRect(4, h - 18, (w - 8) * frac, 4, 2); ctx.fill(); }
+  txt(ctx, car.glowPhase === 'off' ? 'Plugs off' : `${car.glowPhase === 'pre' ? 'Pre-glow' : 'After-glow'} · ${Math.ceil(car.glowLeft)} s left`, 4, h - 1, { size: 11, color: C.text2 });
+}
+
+/* ── Common rail (mirrors CommonRailDiagram in the app) ─────────────────────
+ * High-pressure pump (piston pulses with engine speed) feeding two rails — one per
+ * bank — with three injectors each. Rail fill = pressure; injectors spray in firing order.
+ */
+const FIRING = [0, 3, 1, 4, 2, 5]; // V6 TDI firing order 1-4-3-6-2-5 → indices
+function drawRail(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-rail'));
+  const pressure = sweepTowards(spring('rail', car.rail, 2000), 2000), frac = Math.min(1, pressure / 2000);
+  const col = pressure >= 1800 ? C.caution : C.teal;
+  const t = performance.now() / 1000, rev = car.rpm / 60;                   // crank revs per second
+  const pumpX = 34, railL = 92, railR = w - 150, rows = [h * 0.3, h * 0.72];
+  // pump: cylinder with a piston bobbing at pump speed
+  ctx.strokeStyle = C.text2; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(pumpX - 16, h / 2 - 26, 32, 52, 6); ctx.stroke();
+  const stroke = (Math.sin(t * rev * Math.PI) + 1) / 2;
+  ctx.fillStyle = withAlpha(col, 0.85); ctx.fillRect(pumpX - 12, h / 2 - 22 + stroke * 18, 24, 8);
+  txt(ctx, 'pump', pumpX, h / 2 + 42, { size: 11, color: C.text3, align: 'center' });
+  rows.forEach((y, bank) => {
+    // feed line
+    ctx.strokeStyle = withAlpha(col, 0.3 + 0.6 * frac); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(pumpX + 16, h / 2); ctx.lineTo(railL - 14, h / 2); ctx.lineTo(railL - 14, y); ctx.lineTo(railL, y); ctx.stroke();
+    // rail tube: hairline shell, filled to pressure intensity
+    ctx.fillStyle = C.surfaceHigh; ctx.beginPath(); ctx.roundRect(railL, y - 7, railR - railL, 14, 7); ctx.fill();
+    const g = ctx.createLinearGradient(railL, 0, railR, 0);
+    g.addColorStop(0, withAlpha(col, 0.25 + 0.7 * frac)); g.addColorStop(1, withAlpha(col, 0.15 + 0.5 * frac));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(railL, y - 7, railR - railL, 14, 7); ctx.fill();
+    txt(ctx, `Bank ${bank + 1}`, railL, y - 12, { size: 11, color: C.text3 });
+    // injectors + spray in firing order
+    for (let k = 0; k < 3; k++) {
+      const x = railL + (railR - railL) * (k + 0.5) / 3, cyl = bank * 3 + k;
+      ctx.fillStyle = C.text2; ctx.fillRect(x - 3, y + 7, 6, 10);
+      const slot = FIRING.indexOf(cyl), cycle = (t * rev / 2 * 6) % 6;     // 6 injections per 2 revs
+      if (car.rpm > 50 && Math.abs(cycle - slot) < 0.6) {
+        ctx.fillStyle = withAlpha(col, 0.8); ctx.beginPath(); ctx.moveTo(x, y + 17); ctx.lineTo(x - 7, y + 30); ctx.lineTo(x + 7, y + 30); ctx.closePath(); ctx.fill();
+      }
+    }
+  });
+  txt(ctx, Math.round(pressure).toLocaleString('en-US'), w - 4, h / 2 - 2, { size: 30, weight: 300, color: C.text, align: 'right' });
+  txt(ctx, 'bar', w - 4, h / 2 + 18, { size: 12, color: C.text2, align: 'right' });
+  txt(ctx, `target ${Math.round(car.railTarget).toLocaleString('en-US')}`, w - 4, h / 2 + 36, { size: 12, color: C.teal, align: 'right' });
+}
+
+/* ── EGR valve (mirrors EgrValveDiagram in the app) ─────────────────────────
+ * Cross-section: hot exhaust below, fresh intake above, joined by a channel with a
+ * poppet valve that lifts with the commanded opening; recirculated gas rises through it.
+ */
+function drawEgr(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-egr'));
+  const open = sweepTowards(spring('egr', car.egr, 100), 100) / 100;
+  const t = performance.now() / 1000;
+  const x0 = 110, x1 = w - 10, top = 4, bot = h - 4, pipeH = 20, cx = (x0 + x1) / 2, chW = 30;
+  const pipe = (y, col, label) => {
+    ctx.fillStyle = withAlpha(col, 0.16); ctx.beginPath(); ctx.roundRect(x0, y, x1 - x0, pipeH, 8); ctx.fill();
+    ctx.strokeStyle = withAlpha(col, 0.5); ctx.lineWidth = 1.2; ctx.stroke();
+    for (let i = 0; i < 4; i++) {                                           // flow chevrons
+      const x = x0 + 14 + ((t * 40 + i * (x1 - x0) / 4) % (x1 - x0 - 28));
+      ctx.strokeStyle = withAlpha(col, 0.7); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - 3, y + 6); ctx.lineTo(x + 2, y + pipeH / 2); ctx.lineTo(x - 3, y + pipeH - 6); ctx.stroke();
+    }
+    txt(ctx, label, x1 - 6, y + pipeH / 2 + 4, { size: 11, color: C.text3, align: 'right' });
+  };
+  pipe(top, C.cool, 'intake');
+  pipe(bot - pipeH, C.alert, 'exhaust');
+  // channel
+  ctx.fillStyle = C.surfaceHigh; ctx.fillRect(cx - chW / 2, top + pipeH, chW, bot - pipeH - top - pipeH);
+  // valve seat + poppet (lifts upward when opening)
+  const seatY = bot - pipeH - 6, lift = open * 22;
+  ctx.strokeStyle = C.text2; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - chW / 2, seatY); ctx.lineTo(cx - 8, seatY); ctx.moveTo(cx + 8, seatY); ctx.lineTo(cx + chW / 2, seatY); ctx.stroke();
+  ctx.fillStyle = open > 0.02 ? C.accent : C.text3;
+  ctx.beginPath(); ctx.roundRect(cx - 10, seatY - 3 - lift, 20, 5, 2); ctx.fill();
+  ctx.fillRect(cx - 1.5, top + pipeH, 3, seatY - 3 - lift - top - pipeH);   // stem up to the actuator
+  // recirculated gas particles, count and speed scale with opening
+  const n = Math.round(open * 10);
+  for (let i = 0; i < n; i++) {
+    const p = ((t * (0.6 + open) + i / Math.max(1, n)) % 1);
+    const y = seatY - p * (seatY - top - pipeH), x = cx + Math.sin(i * 2.3 + t * 3) * 7;
+    ctx.fillStyle = withAlpha(p < 0.5 ? C.alert : C.caution, 0.85); ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+  txt(ctx, `${Math.round(open * 100)}`, 0, h / 2 + 6, { size: 34, weight: 300, color: C.text });
+  txt(ctx, '% open', 0, h / 2 + 26, { size: 12, color: C.text2 });
+  txt(ctx, open < 0.03 ? 'closed · full power' : open > 0.3 ? 'recirculating' : 'trickle', 0, h / 2 + 44, { size: 12, color: C.text3 });
+}
+
+/* ── Gearbox (mirrors GearboxPanel in the app) ──────────────────────────────
+ * ZF 8HP gear ladder with ratios, plus the torque converter: engine-side pump and
+ * gearbox-side turbine spinning at their real relative speeds, a lock-up clutch
+ * bridge when locked, and the slip in rpm.
+ */
+const ZF_RATIOS = [4.71, 3.14, 2.11, 1.67, 1.29, 1.0, 0.84, 0.67];
+let pumpAngle = 0, turbineAngle = 0, lastGbT = performance.now();
+function drawGearbox(car) {
+  const { ctx, w, h } = prep(document.getElementById('cv-gearbox'));
+  const now = performance.now(), dt = Math.min(0.05, (now - lastGbT) / 1000); lastGbT = now;
+  const mode = car.gear ? car.gear[0] : 'P', num = car.gear ? parseInt(car.gear.slice(1)) || 0 : 0;
+  // ladder
+  const cells = ['P', 'R', 'N', 'D', '1', '2', '3', '4', '5', '6', '7', '8'];
+  const cw = Math.min(40, (w - 30) / cells.length), y0 = 4;
+  cells.forEach((c, i) => {
+    const x = i * cw + (i > 3 ? 14 : 0);
+    const lit = (i < 4 && c === mode) || (i >= 4 && Number(c) === num);
+    ctx.fillStyle = lit ? (i < 4 ? C.surfaceHigh : (car.slip ? C.caution : C.accent)) : 'transparent';
+    ctx.beginPath(); ctx.roundRect(x + 2, y0, cw - 4, 30, 6); ctx.fill();
+    txt(ctx, c, x + cw / 2, y0 + 20, { size: 15, weight: lit ? 600 : 500, color: lit ? (i < 4 ? C.text : css('--on-accent')) : C.text3, align: 'center' });
+    if (i >= 4) txt(ctx, ZF_RATIOS[i - 4].toFixed(2), x + cw / 2, y0 + 46, { size: 10, color: lit ? C.text2 : C.text3, align: 'center' });
+  });
+  // torque converter
+  const locked = !car.slip, engine = car.rpm, turbine = locked ? engine : engine * 0.9, slipRpm = engine - turbine;
+  pumpAngle += dt * engine / 60 * Math.PI * 2 * 0.05; turbineAngle += dt * turbine / 60 * Math.PI * 2 * 0.05; // slowed ×20 to be visible
+  const cy = h - 44, r = 30, px = 50, tx = 50 + r * 2 + 26;
+  const rotor = (x, a, col, label) => {
+    ctx.beginPath(); ctx.arc(x, cy, r, 0, Math.PI * 2); ctx.fillStyle = css('--surface'); ctx.fill(); ctx.strokeStyle = C.hair; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.save(); ctx.translate(x, cy); ctx.rotate(a); ctx.strokeStyle = col; ctx.lineWidth = 2;
+    for (let k = 0; k < 8; k++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(6, 0); ctx.quadraticCurveTo(r * 0.6, 6, r - 4, 0); ctx.stroke(); }
+    ctx.restore();
+    txt(ctx, label, x, cy + r + 14, { size: 11, color: C.text3, align: 'center' });
+  };
+  rotor(px, pumpAngle, C.text2, 'engine');
+  rotor(tx, turbineAngle, locked ? C.teal : C.caution, 'gearbox');
+  // lock-up clutch bridge
+  ctx.fillStyle = locked ? C.teal : withAlpha(C.caution, 0.35);
+  ctx.beginPath(); ctx.roundRect(px + r - 2, cy - 4, tx - px - 2 * r + 4, 8, 4); ctx.fill();
+  if (!locked) { ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = C.caution; ctx.lineWidth = 1.5; ctx.strokeRect(px + r, cy - 4, tx - px - 2 * r, 8); ctx.restore(); }
+  // readouts
+  const ratio = num ? ZF_RATIOS[num - 1] : null, rx = tx + r + 30;
+  txt(ctx, locked ? 'Converter locked' : 'Converter slipping', rx, cy - 18, { size: 14, weight: 500, color: locked ? C.teal : C.caution });
+  txt(ctx, `${Math.round(slipRpm)} rpm slip`, rx, cy + 2, { size: 13, color: C.text2 });
+  if (ratio) txt(ctx, `ratio ${ratio.toFixed(2)} · output ${Math.round(turbine / ratio).toLocaleString('en-US')} rpm`, rx, cy + 22, { size: 13, color: C.text2 });
+}
+
 /* ── Needle physics ─────────────────────────────────────────────────────────
  * Every needle, arc and bar follows its value on a damped spring (slight overshoot,
  * like a real instrument needle) instead of jumping. Numbers are read from the same
@@ -798,6 +1447,18 @@ function spring(key, target, span = 1) {
   s.t = target; s.span = span || 1;
   if (Math.abs(s.t - s.x) > s.span * 1e-4 || Math.abs(s.v) > s.span * 1e-3) ensureTick();
   return s.x;
+}
+// Pages with continuous motion (fuel surface, air particles, spinning turbo, glow pulse)
+// redraw on a frame loop only while they're on screen.
+let ambientRunning = false;
+function ensureAmbient() {
+  if (ambientRunning) return;
+  ambientRunning = true;
+  requestAnimationFrame(function loop() {
+    if (!['economy', 'air', 'engine', 'driveline'].includes(state.view)) { ambientRunning = false; return; }
+    render();
+    requestAnimationFrame(loop);
+  });
 }
 function ensureTick() {
   if (ticking) return;
@@ -882,6 +1543,7 @@ function buildDials() {
 
 function render() {
   const car = sim(state.throttle);
+  if (car.coldCoolant != null) car.coolant = car.coldCoolant; // demo cold start
   if (state.peakKPa == null || car.boostKPa > state.peakKPa) state.peakKPa = car.boostKPa;
   const u = state.unit;
 
@@ -922,8 +1584,7 @@ function render() {
     ? `<span class="dot" style="background:${C.caution}"></span>Converter slipping`
     : `<span class="dot" style="background:${C.teal}"></span>Converter locked`;
   meter('m-atf', 'ATF temperature', car.atf, '°C', 40, 130, { cool: 65, caution: 105, alert: 115 });
-  meter('m-cool', 'Coolant', car.coolant, '°C', 50, 130, { cool: 80, caution: 105, alert: 115 });
-  meter('m-oil', 'Oil', car.oil, '°C', 50, 150, { cool: 85, caution: 125, alert: 138 });
+  if (state.view === 'driveline') drawGearbox(car);
 
   // 4Motion (only draw when visible — canvases have no size while hidden)
   if (state.view === 'offroad') {
@@ -956,6 +1617,34 @@ function render() {
     document.getElementById('splitR').style.flexGrow = car.rearTorque;
     meter('m-slip', 'Highest wheel slip', m, '%', 0, 30, { caution: 6, alert: 15, digits: 1 });
   }
+
+  if (state.view === 'economy') {
+    const level = 0.62, tank = 80;
+    drawEco(car); drawEcoHist(); drawTank(sweepTowards(level, 1));
+    const avg = tripAvg();
+    document.getElementById('range').textContent = Math.round((level * tank) / Math.max(avg, 1) * 100);
+    document.getElementById('tankL').textContent = (level * tank).toFixed(0);
+    document.getElementById('tDist').textContent = trip.dist.toFixed(1);
+    document.getElementById('tTime').textContent = fmtTime(trip.time);
+    document.getElementById('tAvg').textContent = avg.toFixed(1);
+    document.getElementById('tSpeed').textContent = (trip.dist / (trip.time / 3600)).toFixed(0);
+    document.getElementById('tUsed').textContent = trip.used.toFixed(1);
+    document.getElementById('tIdle').textContent = fmtTime(trip.idle);
+  }
+  if (state.view === 'air') {
+    drawAirPath(car); drawAltitude(car); drawAmbient(car); drawHealth(car);
+    document.getElementById('baro').textContent = `${car.baroKPa.toFixed(1)} kPa`;
+    document.getElementById('density').textContent = `${car.density.toFixed(0)} % of sea level`;
+  }
+  if (state.view === 'engine') {
+    drawV6(car); drawBalance(car); drawGlow(car);
+    const gs = document.getElementById('glowStatus');
+    gs.innerHTML = car.glowPhase === 'off'
+      ? `<span class="dot" style="background:${C.text3}"></span>Off · engine warm`
+      : `<span class="dot" style="background:${C.accent}"></span>${car.glowPhase === 'pre' ? 'Pre-glow' : 'After-glow'} · coolant ${car.coolant.toFixed(0)} °C`;
+    drawRail(car); drawEgr(car);
+  }
+  if (['economy', 'air', 'engine', 'driveline'].includes(state.view)) ensureAmbient();
 
   document.getElementById('fuel').textContent = car.fuel.toFixed(1) + ' L/h';
   document.getElementById('peak').textContent = fmtBoost(boostFrom(state.peakKPa, u), u) + ' ' + u;
@@ -1003,7 +1692,7 @@ function renderFaults() {
     </div>`).join('');
 }
 
-const PAGES = ['cluster', 'driveline', 'offroad'];
+const PAGES = ['cluster', 'driveline', 'offroad', 'economy', 'air', 'engine'];
 function setView(view) {
   const from = PAGES.indexOf(state.view), to = PAGES.indexOf(view);
   state.view = view;
@@ -1125,6 +1814,14 @@ function playIntro() {
   })(t0);
 }
 document.getElementById('replayIntro').addEventListener('click', playIntro);
+document.getElementById('coldBtn').addEventListener('click', e => {
+  state.coldAt = state.coldAt ? null : performance.now() / 1000;
+  e.currentTarget.setAttribute('aria-pressed', String(!!state.coldAt));
+  render();
+});
+document.getElementById('resetTrip').addEventListener('click', () => { Object.assign(trip, { dist: 0, time: 0, used: 0, idle: 0 }); ecoHist.length = 0; render(); });
+document.querySelectorAll('[data-theme-btn]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themeBtn)));
+try { const saved = localStorage.getItem('ingwe-theme'); if (saved === 'light') { document.documentElement.dataset.theme = 'light'; readColors(); document.querySelectorAll('[data-theme-btn]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeBtn === 'light'))); } } catch (e) {}
 
 /* ── Stress test + frame-rate meter (mirrors DemoControls / FrameRateStat) ── */
 let autoSweep = false;

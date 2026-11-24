@@ -6,23 +6,29 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 
 /**
- * Simulates an ELM327/STN adapter connected to a 2018 VW Amarok 3.0 V6 TDI.
+ * Simulates an ELM327 adapter plugged into a VW Amarok 3.0 V6 TDI engine ECU.
  *
- * Designed for unit tests and development WITHOUT a physical OBD adapter.
- * It mimics:
- *   - ELM327 init sequence (ATZ, ATE0, etc.)
- *   - Mode 01 PID support bitmasks (realistic subset for a diesel ECU)
- *   - Mode 01 live data responses (RPM, speed, coolant, etc.)
- *   - ISO-TP multi-frame responses (for responses > 7 bytes)
- *   - NO DATA for unsupported PIDs
- *   - SEARCHING... delay on first CAN connect
- *   - CAN ERROR simulation (toggled via [simulateCanError])
+ * Used by the unit tests and by the app's "Mock ELM" data source, so the full
+ * pipeline (driver → ISO-TP → parser → formulas → gauges) runs without hardware.
  *
- * Response timing: [responseDelayMs] (default 50 ms) mimics adapter latency.
- * Override [customResponses] to inject specific raw responses in tests.
+ * Behaves like the real thing where it matters:
+ *  - Honours ATS0/ATS1 (spaces) and ATH0/ATH1 (CAN IDs); ATZ resets them.
+ *  - Answers ANY Mode 01 request, single or batched ("010C0D0B1"), composing a
+ *    correct ISO-TP reply — single frame, or first + consecutive frames when long.
+ *  - Builds the 0x00/0x20/… support bitmaps from the PIDs it actually knows.
+ *  - Answers UDS 0x22 for DIDs in [didData]; NO DATA otherwise.
+ *  - Optional [liveData] provider: when set, Mode 01 values come from it (the app
+ *    feeds it from the demo throttle, so the slider drives the "ECU").
+ *
+ * Response timing: [responseDelayMs] mimics adapter + bus latency.
+ * [customResponses] overrides exact commands in tests.
  */
 class MockTransport(
     private val responseDelayMs: Long = 50L,
+    private val liveData: ((pid: Int) -> ByteArray?)? = null,
+    /** False = ignition off: the ECU stays silent, but ATRV (adapter voltage) still answers. */
+    private val ecuAwake: () -> Boolean = { true },
+    private val batteryVolts: () -> Float = { 12.6f },
 ) : Transport {
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -37,7 +43,16 @@ class MockTransport(
     /** Override specific raw hex commands → raw response lines. */
     val customResponses: MutableMap<String, List<String>> = mutableMapOf()
 
+    /** UDS DIDs this ECU answers (DID → data bytes). */
+    val didData: MutableMap<Int, ByteArray> = mutableMapOf()
+
+    /** Number of commands received — lets tests count round trips. */
+    var commandCount = 0
+        private set
+
     private var connected = false
+    private var spaces = true
+    private var headers = true
 
     override suspend fun connect() {
         _connectionState.value = ConnectionState.CONNECTING
@@ -52,6 +67,7 @@ class MockTransport(
         check(connected) { "MockTransport: not connected" }
 
         return flow {
+            commandCount++
             delay(responseDelayMs)
 
             if (simulateCanError) {
@@ -60,24 +76,32 @@ class MockTransport(
                 return@flow
             }
 
-            val key = command.trim().uppercase()
+            val key = command.replace(" ", "").trim().uppercase()
 
-            // Custom response override
             customResponses[key]?.let { lines ->
-                lines.forEach { emit(it) }
+                lines.forEach { emit(format(it)) }
                 emit(">")
                 return@flow
             }
 
-            // Built-in response table
-            val lines = RESPONSES[key] ?: listOf("NO DATA")
+            if (key.startsWith("AT") || key.startsWith("ST")) {
+                emit(handleAt(key))
+                emit(">")
+                return@flow
+            }
 
-            if (simulateSearching && !key.startsWith("AT") && !key.startsWith("ST")) {
+            if (simulateSearching) {
                 emit("SEARCHING...")
                 delay(500)
             }
 
-            lines.forEach { emit(it) }
+            val lines = when {
+                !ecuAwake() -> listOf("NO DATA")
+                key.startsWith("01") && (liveData != null || key !in RESPONSES) -> mode01(key)
+                key.startsWith("22") && key.length >= 6 -> mode22(key)
+                else -> RESPONSES[key] ?: listOf("NO DATA")
+            }
+            lines.forEach { emit(format(it)) }
             emit(">")
         }
     }
@@ -87,134 +111,131 @@ class MockTransport(
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
+    private fun handleAt(key: String): String = when (key) {
+        "ATZ" -> { spaces = true; headers = true; "ELM327 v1.5" }
+        "ATS0" -> { spaces = false; "OK" }
+        "ATS1" -> { spaces = true; "OK" }
+        "ATH0" -> { headers = false; "OK" }
+        "ATH1" -> { headers = true; "OK" }
+        "ATI" -> "ELM327 v1.5"
+        "ATRV" -> "%.1fV".format(java.util.Locale.US, batteryVolts())
+        else -> "OK"
+    }
+
+    /** "01" + PID pairs + optional response-count digit. */
+    private fun mode01(key: String): List<String> {
+        val body = key.substring(2)
+        val pidHex = if (body.length % 2 == 1) body.dropLast(1) else body
+        val pids = pidHex.chunked(2).mapNotNull { it.toIntOrNull(16) }
+        val payload = ArrayList<Byte>()
+        payload += 0x41.toByte()
+        for (pid in pids) {
+            val data = dataFor(pid) ?: continue
+            payload += pid.toByte()
+            data.forEach { payload += it }
+        }
+        return if (payload.size == 1) listOf("NO DATA") else isoTpFrames(payload)
+    }
+
+    private fun mode22(key: String): List<String> {
+        val did = key.substring(2, 6).toIntOrNull(16) ?: return listOf("NO DATA")
+        val data = didData[did] ?: return listOf("7E8 03 7F 22 31") // requestOutOfRange
+        val payload = ArrayList<Byte>()
+        payload += 0x62.toByte(); payload += (did ushr 8).toByte(); payload += did.toByte()
+        data.forEach { payload += it }
+        return isoTpFrames(payload)
+    }
+
+    private fun dataFor(pid: Int): ByteArray? {
+        if (pid % 0x20 == 0) return supportBitmap(pid)
+        return liveData?.invoke(pid) ?: STATIC_DATA[pid]
+    }
+
+    /** Bit 31 = base+1 … bit 0 = base+32 (which also means "next range exists"). */
+    private fun supportBitmap(base: Int): ByteArray? {
+        val known = STATIC_DATA.keys
+        if (base != 0 && known.none { it in (base + 1)..(base + 0x20) }) return null
+        var mask = 0L
+        for (pid in known) if (pid in (base + 1)..(base + 0x20)) mask = mask or (1L shl (32 - (pid - base)))
+        if (known.any { it > base + 0x20 }) mask = mask or 1L
+        return byteArrayOf((mask ushr 24).toByte(), (mask ushr 16).toByte(), (mask ushr 8).toByte(), mask.toByte())
+    }
+
+    /** Encode a payload as ELM-style CAN frames from 7E8 (always written with spaces; [format] strips them). */
+    private fun isoTpFrames(payload: List<Byte>): List<String> {
+        val bytes = payload.map { it.toInt() and 0xFF }
+        fun line(frame: List<Int>) = "7E8 " + frame.joinToString(" ") { "%02X".format(it) }
+        if (bytes.size <= 7) return listOf(line(listOf(bytes.size) + bytes))
+        val out = mutableListOf(line(listOf(0x10 or (bytes.size ushr 8), bytes.size and 0xFF) + bytes.take(6)))
+        var i = 6
+        var sn = 1
+        while (i < bytes.size) {
+            val chunk = bytes.subList(i, minOf(i + 7, bytes.size))
+            out += line(listOf(0x20 or sn) + chunk + List(7 - chunk.size) { 0 })
+            i += 7
+            sn = (sn + 1) and 0x0F
+        }
+        return out
+    }
+
+    /** Apply the current ATS / ATH settings to a frame line. */
+    private fun format(line: String): String {
+        val tokens = line.split(' ')
+        val isFrame = tokens.size > 1 && tokens.all { t -> t.isNotEmpty() && t.all { it.isDigit() || it in 'A'..'F' } }
+        if (!isFrame) return line
+        val kept = if (!headers && tokens[0].length == 3) tokens.drop(1) else tokens
+        return if (spaces) kept.joinToString(" ") else kept.joinToString("")
+    }
+
     companion object {
         /**
-         * Canned ELM327 responses.
-         *
-         * Format: command (uppercase, trimmed) → list of response lines.
-         * The ">" prompt is appended by [send], not here.
-         *
-         * PID support bitmask for 7E8 (engine ECU):
-         *   PIDs 01-20: 0xBE3EB811  → RPM✓ Speed✓ Load✓ Coolant✓ MAF✓ MAP✓
-         *   PIDs 21-40: 0xA0150000  → IAT✓ FuelRailPressure✓ (0x23)
-         *   PIDs 41-60: 0xFED00000  → Voltage✓(0x42), OilTemp✓(0x5C), FuelRate✓(0x5E)
-         *   PIDs 61-80: 0xE0000000  → Boost✓(0x6F), EGT✓(0x78)
-         *   PIDs 81-A0: 0x20000000  → DPF✓(0x7C)
-         *
-         * Actual simulated values:
-         *   RPM    = 850  (idle)
-         *   Speed  = 0
-         *   Load   = 20%
-         *   Coolant= 85°C
-         *   IAT    = 30°C
-         *   MAF    = 8.5 g/s
-         *   MAP    = 101 kPa (atmospheric, idle)
-         *   Voltage= 14.1 V
+         * Idle, warm engine (Mode 01 data bytes, after the PID).
+         *   RPM 850, 0 km/h, load 20 %, coolant 85 °C, IAT 30 °C, MAF 8.5 g/s,
+         *   MAP 101 kPa, rail 300 bar, 14.1 V, oil 90 °C, 1.5 L/h, fuel 62 %,
+         *   baro 83 kPa (~1,600 m), ambient 24 °C, EGR 45 %, EGT 314 °C.
          */
+        val STATIC_DATA: Map<Int, ByteArray> = mapOf(
+            0x04 to b(0x33),
+            0x05 to b(0x7D),
+            0x0B to b(0x65),
+            0x0C to b(0x0D, 0x48),
+            0x0D to b(0x00),
+            0x0F to b(0x46),
+            0x10 to b(0x03, 0x52),
+            0x23 to b(0x0B, 0xB8),
+            0x2C to b(0x73),
+            0x2F to b(0x9E),
+            0x33 to b(0x53),
+            0x42 to b(0x37, 0x14),
+            0x46 to b(0x40),
+            0x5C to b(0x82),
+            0x5E to b(0x00, 0x1E),
+            0x62 to b(0x8C),
+            0x6F to b(0x01, 0x65, 0x00),
+            0x70 to b(0x03, 0x0C, 0xA0, 0x0C, 0x80, 0, 0, 0, 0, 0),
+            0x71 to b(0x03, 0x59, 0x59, 0, 0, 0),
+            0x77 to b(0x01, 0x46, 0, 0, 0),
+            0x78 to b(0x01, 0x0D, 0xD4, 0, 0, 0, 0, 0, 0),
+        )
+
+        private fun b(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
+
+        /** Exact canned replies kept from M1 (tests rely on these). */
         private val RESPONSES: Map<String, List<String>> = mapOf(
-
-            // ── Adapter init ──────────────────────────────────────────────
-            "ATZ"       to listOf("ELM327 v1.5"),
-            "ATE0"      to listOf("OK"),
-            "ATL0"      to listOf("OK"),
-            "ATS0"      to listOf("OK"),
-            "ATH1"      to listOf("OK"),
-            "ATSP6"     to listOf("OK"),
-            "ATCAF1"    to listOf("OK"),
-            "ATSH7E0"   to listOf("OK"),
-            "ATCRA7E8"  to listOf("OK"),
-            "ATAT1"     to listOf("OK"),
-            "ATST64"    to listOf("OK"),
-
-            // ── Mode 09 — VIN ─────────────────────────────────────────────
-            // ISO-TP multi-frame: VIN = "1VWFE21C04M000001" (fake)
-            "0902"      to listOf(
+            // Mode 09 — VIN, ISO-TP multi-frame with the ELM byte-count header line
+            "0902" to listOf(
                 "014",
                 "7E8 10 14 49 02 01 31 56 57",
                 "7E8 21 46 45 32 31 43 30 34",
-                "7E8 22 4D 30 30 30 30 30 31"
+                "7E8 22 4D 30 30 30 30 30 31",
             ),
-
-            // ── Mode 01 PID support bitmasks ──────────────────────────────
-            "010001"    to listOf("7E8 06 41 00 BE 3E B8 11"),  // PIDs 01-20
-            "012001"    to listOf("7E8 06 41 20 A0 15 00 00"),  // PIDs 21-40
-            "014001"    to listOf("7E8 06 41 40 FE D0 00 00"),  // PIDs 41-60
-            "016001"    to listOf("7E8 06 41 60 E0 00 00 00"),  // PIDs 61-80
-            "018001"    to listOf("7E8 04 41 80 20 00 00 00"),  // PIDs 81-A0
-            "01A001"    to listOf("NO DATA"),                   // PIDs A1-C0 not supported
-
-            // ── Mode 01 live data (idle, engine warm) ─────────────────────
-            // RPM: 0x0C — Formula: ((A*256)+B)/4 — 850 rpm → A=0x0D, B=0x24
-            "010C1"     to listOf("7E8 04 41 0C 0D 24"),
-
-            // Speed: 0x0D — Formula: A — 0 km/h
-            "010D1"     to listOf("7E8 03 41 0D 00"),
-
-            // Engine load: 0x04 — Formula: A*100/255 — 20% → A=0x33
-            "01041"     to listOf("7E8 03 41 04 33"),
-
-            // Coolant temp: 0x05 — Formula: A-40 — 85°C → A=0x7D
-            "01051"     to listOf("7E8 03 41 05 7D"),
-
-            // IAT: 0x0F — Formula: A-40 — 30°C → A=0x46
-            "010F1"     to listOf("7E8 03 41 0F 46"),
-
-            // MAF: 0x10 — Formula: ((A*256)+B)/100 g/s — 8.5 g/s → 850 = 0x0352
-            "01101"     to listOf("7E8 04 41 10 03 52"),
-
-            // MAP: 0x0B — Formula: A kPa — 101 kPa → A=0x65
-            "010B1"     to listOf("7E8 03 41 0B 65"),
-
-            // Fuel rail pressure: 0x23 — Formula: ((A*256)+B)*10 kPa — 1800 bar→ skip for now
-            "01231"     to listOf("7E8 04 41 23 1B 58"),
-
-            // Battery voltage: 0x42 — Formula: ((A*256)+B)/1000 V — 14.1V → 14100 = 0x3714
-            "01421"     to listOf("7E8 04 41 42 37 14"),
-
-            // Oil temp: 0x5C — Formula: A-40 — 90°C → A=0x82
-            "015C1"     to listOf("7E8 03 41 5C 82"),
-
-            // Fuel rate: 0x5E — Formula: ((A*256)+B)*0.05 L/h — idle 1.5 L/h → 30=0x001E
-            "015E1"     to listOf("7E8 04 41 5E 00 1E"),
-
-            // Boost: 0x6F — Formula per spec: 3 bytes; B=absolute kPa, C=relative kPa
-            "016F1"     to listOf("7E8 05 41 6F 00 65 00"),
-
-            // EGT: 0x78 — multi-frame; sensor 1 temp = 350°C → 3500 + 40 = 3540 = 0x0DD4
-            "01781"     to listOf(
-                "7E8 10 09 41 78 11 00 0D D4",
-                "7E8 21 00 00 00 00 00 00 00"
-            ),
-
-            // DPF: 0x7C — multi-frame; soot load 10%, ash 2%
-            "017C1"     to listOf(
-                "7E8 10 0A 41 7C 00 0A 02 00",
-                "7E8 21 00 00 00 00 00 00 00"
-            ),
-
-            // Batched request example (RPM + Speed + Load + Coolant)
-            "010C0D04054"   to listOf(
-                "7E8 06 41 0C 0D 24 00",
-                "7E8 06 41 0D 00 04 33",
-                "7E8 04 41 05 7D 00 00"
-            ),
-
-            // ── Mode 03 — Stored DTCs ─────────────────────────────────────
-            "03"        to listOf("7E8 02 43 00"), // No stored DTCs
-
-            // ── Mode 07 — Pending DTCs ────────────────────────────────────
-            "07"        to listOf("7E8 02 47 00"), // No pending DTCs
-
-            // ── Mode 0A — Permanent DTCs ──────────────────────────────────
-            "0A"        to listOf("7E8 02 4A 00"), // No permanent DTCs
-
-            // ── UDS 0x19 0x02 — Read DTCs with status mask ────────────────
-            "190201"    to listOf("7E8 03 59 02 00"), // No DTCs
-
-            // ── UDS 0x22 — ReadDataByIdentifier (DID scanner) ─────────────
-            // Real DIDs are unknown; return a fake response for 0x1000
-            "221000"    to listOf("7E8 05 62 10 00 AB CD"),
-            // All others: NRC 0x31 (requestOutOfRange)
+            // RPM: ((A*256)+B)/4 → 0x0D24 = 841 rpm (legacy value used by tests)
+            "010C1" to listOf("7E8 04 41 0C 0D 24"),
+            "010D1" to listOf("7E8 03 41 0D 00"),
+            "03" to listOf("7E8 02 43 00"),   // no stored DTCs
+            "07" to listOf("7E8 02 47 00"),   // no pending DTCs
+            "0A" to listOf("7E8 02 4A 00"),   // no permanent DTCs
+            "190201" to listOf("7E8 03 59 02 00"),
         )
     }
 }

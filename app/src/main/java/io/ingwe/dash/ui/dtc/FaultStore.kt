@@ -8,11 +8,18 @@ import io.ingwe.dash.ui.theme.IngweCaution
 import io.ingwe.dash.ui.theme.IngweTextSecondary
 
 /** DTC status as reported by Mode 03 (stored), 07 (pending) and 0A (permanent). */
-enum class DtcSeverity(val label: String, val color: Color) {
-    CONFIRMED("Stored", IngweAlert),
-    PENDING("Pending", IngweCaution),
-    PERMANENT("Permanent", IngweAlert),
-    INFO("Info", IngweTextSecondary),
+enum class DtcSeverity(val label: String) {
+    CONFIRMED("Stored"),
+    PENDING("Pending"),
+    PERMANENT("Permanent"),
+    INFO("Info");
+
+    /** A getter (not a constructor value) so it follows the light/dark theme. */
+    val color: Color get() = when (this) {
+        CONFIRMED, PERMANENT -> IngweAlert
+        PENDING -> IngweCaution
+        INFO -> IngweTextSecondary
+    }
 }
 
 /** A single Diagnostic Trouble Code with ECU context and freeze-frame parameters. */
@@ -80,20 +87,20 @@ class FaultStore(initial: List<DtcItem> = SAMPLE_CODES) {
                 ),
             ),
             DtcItem(
-                code = "P2002",
-                title = "DPF efficiency below threshold",
-                system = "Exhaust aftertreatment",
-                description = "DPF differential pressure suggests poor soot trapping or ash saturation.",
+                code = "P0671",
+                title = "Cylinder 1 glow plug circuit",
+                system = "Glow system",
+                description = "The glow plug control module saw an open circuit on cylinder 1 during pre-glow.",
                 severity = DtcSeverity.PENDING,
                 freezeFrame = listOf(
-                    "Soot mass" to "24.5 g",
-                    "Diff. pressure" to "14 mbar",
-                    "Exhaust temp" to "310 °C",
+                    "Coolant" to "4 °C",
+                    "Battery" to "12.1 V",
+                    "Engine speed" to "0 rpm",
                 ),
                 commonCauses = listOf(
-                    "Regenerations interrupted by frequent short trips",
-                    "Pinched or cracked DPF pressure sensor hoses",
-                    "Ash load near the DPF service limit",
+                    "Glow plug element burnt out (check resistance, normally ~0.6 Ω)",
+                    "Loose or corroded glow plug connector",
+                    "Wiring fault between plug and glow control module",
                 ),
             ),
         )

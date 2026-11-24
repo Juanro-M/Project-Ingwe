@@ -37,7 +37,7 @@ private const val VANE_TRAVEL_DEG = 58f
  */
 @Composable
 fun VgtVaneGauge(positionPct: Float, modifier: Modifier = Modifier, size: Dp = 124.dp) {
-    val animatedPct = animateFloatAsState(positionPct, NeedleSpring, label = "vgt")
+    val animatedPct = animateFloatAsState(if (positionPct.isNaN()) 0f else positionPct, NeedleSpring, label = "vgt")
     val sweep = LocalIgnitionSweep.current
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
@@ -101,7 +101,7 @@ fun VgtVaneGauge(positionPct: Float, modifier: Modifier = Modifier, size: Dp = 1
         // Reads the same spring as the vanes so it counts with them.
         val text by remember(animatedPct) { derivedStateOf { animatedPct.value.roundToInt().coerceIn(0, 100).toString() } }
         Text(
-            text = text,
+            text = if (positionPct.isNaN()) "–" else text,
             style = ReadoutSmall.copy(fontSize = (size.value * 0.16f).sp, lineHeight = (size.value * 0.16f).sp),
             color = IngweTextPrimary,
             modifier = Modifier.align(Alignment.Center).padding(bottom = 14.dp),

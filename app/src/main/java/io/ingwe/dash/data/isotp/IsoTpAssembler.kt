@@ -34,11 +34,22 @@ class IsoTpAssembler {
      */
     fun feed(line: String) {
         if (done) return
-        val parts = line.trim().split(WHITESPACE).filter { it.isNotEmpty() }
+        var parts = line.trim().split(WHITESPACE).filter { it.isNotEmpty() }
         if (parts.isEmpty() || parts.any { !it.isHex() }) return
 
-        // A single token is the ELM byte-count header (e.g. "014"), not a frame.
-        if (parts.size == 1) return
+        if (parts.size == 1) {
+            val token = parts[0]
+            // A short lone token is the ELM byte-count header (e.g. "014"), not a frame.
+            if (token.length < 4) return
+            // Spaces off (ATS0): "7E8064100BE3EB811". Odd length = 3-char 11-bit CAN ID + byte pairs;
+            // even length = no header, byte pairs only.
+            val start = if (token.length % 2 == 1) 3 else 0
+            parts = buildList {
+                if (start == 3) add(token.substring(0, 3))
+                var i = start
+                while (i + 1 < token.length) { add(token.substring(i, i + 2)); i += 2 }
+            }
+        }
 
         // With ATH1 the first token is an 11-bit CAN ID ("7E8") or 29-bit ID ("18DAF110").
         val dataTokens = if (parts[0].length == 3 || parts[0].length == 8) parts.drop(1) else parts
@@ -97,4 +108,7 @@ class IsoTpAssembler {
     private companion object {
         val WHITESPACE = Regex("\\s+")
     }
+
+    // Note: with spaces off, 29-bit CAN IDs (8 chars) can't be told apart from a
+    // header-less frame by length alone. The Amarok engine bus uses 11-bit IDs.
 }

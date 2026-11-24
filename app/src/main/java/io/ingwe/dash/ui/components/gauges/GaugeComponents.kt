@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.ingwe.dash.data.vehicle.LockupState
 import io.ingwe.dash.ui.theme.*
 import kotlin.math.abs
 import kotlin.math.cos
@@ -56,8 +57,9 @@ private const val PSI_PER_BAR = 14.5038f
 private const val AMBIENT_KPA = 100f
 
 /** Convert absolute manifold pressure (kPa) to gauge pressure in [unit]. */
-fun boostFromKPa(absKPa: Float, unit: BoostUnit): Float {
-    val bar = (absKPa - AMBIENT_KPA) / KPA_PER_BAR
+fun boostFromKPa(absKPa: Float, unit: BoostUnit, baroKPa: Float = AMBIENT_KPA): Float {
+    val ambient = if (baroKPa.isNaN()) AMBIENT_KPA else baroKPa // boost is pressure above the outside air
+    val bar = (absKPa - ambient) / KPA_PER_BAR
     return if (unit == BoostUnit.BAR) bar else bar * PSI_PER_BAR
 }
 
@@ -109,7 +111,7 @@ fun DialGauge(
 ) {
     // Damped spring: the needle swings, overshoots slightly and settles like a real instrument.
     val animated = animateFloatAsState(
-        targetValue = value.coerceIn(min, max),
+        targetValue = if (value.isNaN()) min else value.coerceIn(min, max), // NaN = no data
         animationSpec = NeedleSpring,
         label = "dial",
     )
@@ -153,7 +155,7 @@ fun DialGauge(
                 // ECU target (e.g. requested boost): a teal "bug" laid across the track,
                 // distinct from the white peak-hold mark outside it.
                 val tg = currentTarget.value
-                if (tg != null) {
+                if (tg != null && !tg.isNaN()) {
                     val ta = g.angleOf(sweepTowards(tg.coerceIn(min, max), max, sweep.value))
                     radialLine(ta, g.arcRadius - g.radius * 0.04f, g.arcRadius + g.radius * 0.04f, IngweBackground, g.radius * 0.05f)
                     radialLine(ta, g.arcRadius - g.radius * 0.035f, g.arcRadius + g.radius * 0.035f, IngweTeal, g.radius * 0.028f, StrokeCap.Round)
@@ -191,7 +193,7 @@ fun DialGauge(
             sweep = sweep,
             min = min,
             max = max,
-            valueText = valueText,
+            valueText = if (value.isNaN()) { _ -> "–" } else valueText,
             alertFrom = redlineFrom,
             caption = if (compact) unit else "$label · $unit",
             captionExtra = targetText,
@@ -375,12 +377,13 @@ fun BoostGauge(
     modifier: Modifier = Modifier,
     size: Dp = 220.dp,
     targetKPa: Float? = null,
+    baroKPa: Float = 100f,
 ) {
     val isBar = unit == BoostUnit.BAR
-    val target = targetKPa?.let { boostFromKPa(it, unit) }
+    val target = targetKPa?.takeIf { !it.isNaN() }?.let { boostFromKPa(it, unit, baroKPa) }
     DialGauge(
-        value = boostFromKPa(boostKPa, unit),
-        peak = boostFromKPa(peakKPa, unit),
+        value = boostFromKPa(boostKPa, unit, baroKPa),
+        peak = boostFromKPa(peakKPa, unit, baroKPa),
         target = target,
         targetText = target?.let { "target ${formatBoost(it, unit)}" },
         min = if (isBar) -1f else -15f,
@@ -519,7 +522,7 @@ fun LinearMeter(
     format: String = "%.0f",
     showScale: Boolean = true,
 ) {
-    val animated = animateFloatAsState(value, NeedleSpring, label = "meter")
+    val animated = animateFloatAsState(if (value.isNaN()) min else value, NeedleSpring, label = "meter")
     val sweep = LocalIgnitionSweep.current
     val currentFormat = rememberUpdatedState(format)
     val text by remember(animated) { derivedStateOf { currentFormat.value.format(animated.value) } }
@@ -528,14 +531,14 @@ fun LinearMeter(
     }
     val span = max - min
     fun fractionOf(v: Float) = ((v - min) / span).coerceIn(0f, 1f)
-    val marks = remember(cautionAt, alertAt, coolBelow) {
+    val marks = remember(cautionAt, alertAt, coolBelow, IngweThemeState.isLight) {
         listOfNotNull(coolBelow?.let { it to IngweCool }, cautionAt?.let { it to IngweCaution }, alertAt?.let { it to IngweAlert })
     }
 
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Text(label, style = LabelStyle, color = IngweTextSecondary, modifier = Modifier.weight(1f))
-            Text(text, style = ReadoutSmall, color = color)
+            Text(if (value.isNaN()) "–" else text, style = ReadoutSmall, color = color)
             Spacer(Modifier.width(3.dp))
             Text(unit, style = LabelStyle, color = IngweTextTertiary)
         }
@@ -577,7 +580,7 @@ fun LinearMeter(
 /** Scale numbers under a meter: min, max, and thresholds with ≥ 12 % room either side. */
 @Composable
 private fun MeterScale(min: Float, max: Float, marks: List<Pair<Float, Color>>) {
-    val labels = remember(min, max, marks) {
+    val labels = remember(min, max, marks, IngweThemeState.isLight) {
         val pos = { v: Float -> (v - min) / (max - min) }
         val out = mutableListOf(min to IngweTextTertiary)
         marks.forEach { (at, c) ->
@@ -716,13 +719,13 @@ fun <T> SegmentedControl(
  * Feature panels
  * ──────────────────────────────────────────────────────────────────────────── */
 
-enum class LockupState(val label: String) { LOCKED("Locked"), SLIP("Slipping"), OPEN("Open") }
+
 
 /** ZF 8HP: engine load, converter lockup, output torque and ATF temperature. (Gear is in the tacho hub.) */
 @Composable
 fun TransmissionPanel(
     engineLoadPct: Float,
-    lockup: LockupState,
+    lockup: LockupState?,
     atfTempC: Float,
     engineTorqueNm: Float,
     modifier: Modifier = Modifier,
@@ -732,18 +735,19 @@ fun TransmissionPanel(
         title = "ZF 8HP transmission",
         trailing = {
             StatusDot(
-                text = "Converter ${lockup.label.lowercase()}",
+                text = lockup?.let { "Converter ${it.label.lowercase()}" } ?: "Converter –",
                 color = when (lockup) {
                     LockupState.LOCKED -> IngweTeal
                     LockupState.SLIP -> IngweCaution
                     LockupState.OPEN -> IngweCool
+                    null -> IngweTextTertiary
                 },
             )
         },
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Stat("Engine load", "%.0f".format(engineLoadPct), unit = "%", large = true, modifier = Modifier.weight(1f))
-            Stat("Engine torque", "%.0f".format(engineTorqueNm), unit = "Nm", large = true)
+            Stat("Engine load", engineLoadPct.fmt(), unit = "%", large = true, modifier = Modifier.weight(1f))
+            Stat("Engine torque", engineTorqueNm.fmt(), unit = "Nm", large = true)
         }
         Spacer(Modifier.height(18.dp))
         LinearMeter(
@@ -758,3 +762,6 @@ fun TransmissionPanel(
         )
     }
 }
+
+/** Format a reading, or an en dash when it's unavailable (NaN). */
+fun Float.fmt(pattern: String = "%.0f"): String = if (isNaN()) "–" else pattern.format(this)

@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
+import io.ingwe.dash.data.vehicle.DiffState
+import io.ingwe.dash.data.vehicle.WheelSlip
 import io.ingwe.dash.ui.theme.*
 import kotlin.math.abs
 import kotlin.math.cos
@@ -41,12 +43,7 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.roundToInt
 
-enum class DiffState(val label: String) { OPEN("Open"), LOCKED("Locked") }
 
-/** Per-wheel slip, front-left → rear-right. */
-data class WheelSlip(val fl: Float, val fr: Float, val rl: Float, val rr: Float) {
-    val max get() = maxOf(fl, fr, rl, rr)
-}
 
 private const val SLIP_CAUTION = 6f
 private const val SLIP_ALERT = 15f
@@ -71,14 +68,16 @@ private fun angleColor(deg: Float, caution: Float, alert: Float) = when {
 @Composable
 fun OffRoadPanel(
     steeringAngleDeg: Float,
-    wheelSlip: WheelSlip,
-    rearDiff: DiffState,
+    wheelSlip: WheelSlip?,
+    rearDiff: DiffState?,
     rearTorquePct: Float,
     modifier: Modifier = Modifier,
 ) {
-    val steer = animateFloatAsState(steeringAngleDeg, NeedleSpring, label = "steer")
+    val steer = animateFloatAsState(if (steeringAngleDeg.isNaN()) 0f else steeringAngleDeg, NeedleSpring, label = "steer")
+    val slip = wheelSlip ?: WheelSlip(0f, 0f, 0f, 0f)
 
     val traction = when {
+        wheelSlip == null -> "No data" to IngweTextTertiary
         wheelSlip.max >= SLIP_ALERT -> "Wheels slipping" to IngweAlert
         wheelSlip.max >= SLIP_CAUTION -> "Light slip" to IngweCaution
         else -> "Full grip" to IngweTeal
@@ -93,25 +92,25 @@ fun OffRoadPanel(
             val s = steeringAngleDeg.roundToInt()
             AngleTile(
                 label = "Steering",
-                value = "${abs(s)}°",
-                caption = when { s > 0 -> "right"; s < 0 -> "left"; else -> "centre" },
+                value = if (steeringAngleDeg.isNaN()) "–" else "${abs(s)}°",
+                caption = when { steeringAngleDeg.isNaN() -> ""; s > 0 -> "right"; s < 0 -> "left"; else -> "centre" },
                 color = IngweTeal,
                 modifier = Modifier.width(172.dp).fillMaxHeight(),
             ) { drawSteeringWheel(steer.value) }
             Spacer(Modifier.width(20.dp))
-            DrivetrainDiagram(wheelSlip = wheelSlip, rearDiff = rearDiff)
+            DrivetrainDiagram(wheelSlip = slip, rearDiff = rearDiff ?: DiffState.OPEN)
             Spacer(Modifier.width(20.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatusLine("Centre diff", "Torsen · ${(100 - rearTorquePct).roundToInt()} : ${rearTorquePct.roundToInt()}", IngweTeal)
+                StatusLine("Centre diff", if (rearTorquePct.isNaN()) "Torsen" else "Torsen · ${(100 - rearTorquePct).roundToInt()} : ${rearTorquePct.roundToInt()}", IngweTeal)
                 StatusLine(
                     "Rear diff lock",
-                    if (rearDiff == DiffState.LOCKED) "Engaged" else "Open",
+                    when (rearDiff) { DiffState.LOCKED -> "Engaged"; DiffState.OPEN -> "Open"; null -> "–" },
                     if (rearDiff == DiffState.LOCKED) IngweAccent else IngweTextTertiary,
                 )
-                TorqueSplitBar(rearTorquePct)
+                TorqueSplitBar(if (rearTorquePct.isNaN()) 50f else rearTorquePct)
                 LinearMeter(
                     label = "Highest wheel slip",
-                    value = wheelSlip.max,
+                    value = wheelSlip?.max ?: Float.NaN,
                     unit = "%",
                     min = 0f,
                     max = 30f,
@@ -139,12 +138,12 @@ fun Clinometer(
 ) {
     val caution = if (kind == ClinometerKind.ROLL) 20f else 25f
     val alert = if (kind == ClinometerKind.ROLL) 30f else 35f
-    val animated = animateFloatAsState(angleDeg, NeedleSpring, label = "clino")
+    val animated = animateFloatAsState(if (angleDeg.isNaN()) 0f else angleDeg, NeedleSpring, label = "clino")
     val textMeasurer = rememberTextMeasurer()
 
     val shownDeg by remember(animated) { derivedStateOf { animated.value.roundToInt() } }
     val valueColor = angleColor(shownDeg.toFloat(), caution, alert).let { if (it == IngweTeal) IngweTextPrimary else it }
-    val caption = when (kind) {
+    val caption = if (angleDeg.isNaN()) "no data" else when (kind) {
         ClinometerKind.ROLL -> when { shownDeg > 0 -> "right side down"; shownDeg < 0 -> "left side down"; else -> "level" }
         ClinometerKind.PITCH -> when { shownDeg > 0 -> "nose up"; shownDeg < 0 -> "nose down"; else -> "level" }
     }
@@ -157,7 +156,7 @@ fun Clinometer(
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(if (kind == ClinometerKind.ROLL) "Roll" else "Pitch", style = LabelStyle, color = IngweTextSecondary, modifier = Modifier.weight(1f))
-            Text("${abs(shownDeg)}°", style = ReadoutMedium, color = valueColor)
+            Text(if (angleDeg.isNaN()) "–" else "${abs(shownDeg)}°", style = ReadoutMedium, color = valueColor)
             Spacer(Modifier.width(6.dp))
             Text(caption, style = LabelStyle, color = IngweTextTertiary, modifier = Modifier.padding(bottom = 3.dp))
         }

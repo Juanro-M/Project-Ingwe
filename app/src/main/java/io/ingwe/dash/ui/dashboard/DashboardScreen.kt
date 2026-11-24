@@ -24,9 +24,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import io.ingwe.dash.data.vehicle.DataSource
+import io.ingwe.dash.data.vehicle.IgnitionState
+import io.ingwe.dash.data.vehicle.LockupState
+import io.ingwe.dash.data.vehicle.VehicleRepository
+import io.ingwe.dash.data.vehicle.VehicleState
 import io.ingwe.dash.ui.components.gauges.*
 import io.ingwe.dash.ui.dtc.FaultStore
 import io.ingwe.dash.ui.navigation.Screen
+import io.ingwe.dash.ui.pages.AirPage
+import io.ingwe.dash.ui.pages.EconomyPage
+import io.ingwe.dash.ui.pages.EnginePage
 import io.ingwe.dash.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -34,47 +42,56 @@ private enum class ClusterView(val label: String) {
     CLUSTER("Cluster"),
     DRIVELINE("Driveline"),
     OFFROAD("Off-road"),
+    ECONOMY("Economy"),
+    AIR("Air"),
+    ENGINE("Engine"),
 }
 
 /**
  * Main instrument cluster for the VW Amarok 3.0 V6 TDI.
  *
- * Views:
- *   Cluster   — tacho, boost, speed; VGT / coolant / oil sub-dials; EGT, charge air, torque, battery
+ * Pages (swipe or tap the tabs):
+ *   Cluster   — tacho, boost (+ target), speed; VGT / coolant / oil sub-dials; EGT, charge air, torque, battery
  *   Driveline — tacho with gear in the hub; ZF 8HP load, torque, lockup, ATF; coolant & oil
  *   Off-road  — roll and pitch clinometers; 4Motion steering, per-wheel slip, diff state, torque split
+ *   Economy   — instant consumption, 30 s history, fuel tank & range, trip computer
+ *   Air       — animated air path, altitude, outside air, airflow health
+ *   Engine    — V6 cylinders with glow plugs & injector corrections, rail, EGR
  *
- * Swipe left/right (or tap the tabs) to move between pages.
- *
- * M1: values come from [SimulatedVehicle], driven by the demo throttle.
+ * All values come from [VehicleRepository.state]; the source (demo / mock ELM /
+ * adapter) is chosen in the demo bar.
  */
 @Composable
-fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
+fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: VehicleRepository) {
     var boostUnit by rememberSaveable { mutableStateOf(BoostUnit.BAR) }
-    // Swipe left/right between the three pages; the tabs follow and also drive it.
     val pager = rememberPagerState(pageCount = { ClusterView.entries.size })
     val view = ClusterView.entries[pager.currentPage]
     val scope = rememberCoroutineScope()
-    var throttle by rememberSaveable { mutableFloatStateOf(0.55f) }
+
     var showDemoControls by rememberSaveable { mutableStateOf(false) }
     var autoSweep by remember { mutableStateOf(false) }
+    val throttle by repo.throttle.collectAsState()
+    val source by repo.source.collectAsState()
+    val coldStart by repo.coldStartAtSec.collectAsState()
+    val link by repo.link.collectAsState()
+    val economy by repo.economy.collectAsState()
+    val car by repo.state.collectAsState()
+    val key by repo.key.collectAsState()
 
     // Stress test: drive the throttle idle ↔ full continuously so every gauge moves every frame.
     LaunchedEffect(autoSweep, showDemoControls) {
         if (!autoSweep || !showDemoControls) return@LaunchedEffect
-        val a = Animatable(throttle)
+        val a = Animatable(repo.throttle.value)
         while (true) {
-            a.animateTo(1f, tween(1600, easing = FastOutSlowInEasing)) { throttle = value }
-            a.animateTo(0f, tween(1600, easing = FastOutSlowInEasing)) { throttle = value }
+            a.animateTo(1f, tween(1600, easing = FastOutSlowInEasing)) { repo.throttle.value = value }
+            a.animateTo(0f, tween(1600, easing = FastOutSlowInEasing)) { repo.throttle.value = value }
         }
     }
 
-    val car = remember(throttle) { SimulatedVehicle.at(throttle) }
-
     // Peak hold is updated as a side effect, never during composition.
-    var peakBoostKPa by rememberSaveable { mutableFloatStateOf(car.boostKPa) }
+    var peakBoostKPa by rememberSaveable { mutableFloatStateOf(Float.NaN) }
     LaunchedEffect(car.boostKPa) {
-        if (car.boostKPa > peakBoostKPa) peakBoostKPa = car.boostKPa
+        if (!car.boostKPa.isNaN() && (peakBoostKPa.isNaN() || car.boostKPa > peakBoostKPa)) peakBoostKPa = car.boostKPa
     }
 
     val faults = faultStore.codes
@@ -88,19 +105,20 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
     ) {
         // ── Header ────────────────────────────────────────────────────────────
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+            Column {
                 Text("Amarok 3.0 V6 TDI", style = LabelStyle.copy(fontSize = 14.sp), color = IngweTextPrimary)
                 Spacer(Modifier.height(2.dp))
-                StatusDot(text = "Demo data · ECU 7E0", color = IngweCaution)
+                StatusDot(text = link.text, color = if (source == DataSource.DEMO) IngweCaution else if (link.ok) IngweOk else IngweAlert)
             }
-
+            Spacer(Modifier.weight(1f))
             ViewTabs(selected = view, onSelect = { scope.launch { pager.animateScrollToPage(it.ordinal) } })
-
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Spacer(Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SegmentedControl(
+                    options = listOf(false to "Dark", true to "Light"),
+                    selected = IngweThemeState.isLight,
+                    onSelect = { IngweThemeState.isLight = it },
+                )
                 SegmentedControl(
                     options = listOf(BoostUnit.BAR to "bar", BoostUnit.PSI to "psi"),
                     selected = boostUnit,
@@ -151,29 +169,44 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
             }
         }
 
-        // ── Demo throttle ────────────────────────────────────────────────────
+        // ── Ignition state ───────────────────────────────────────────────────
+        if (car.ignition != IgnitionState.RUNNING) {
+            Spacer(Modifier.height(12.dp))
+            IgnitionBanner(car)
+        }
+
+        // ── Demo bar ─────────────────────────────────────────────────────────
         AnimatedVisibility(visible = showDemoControls) {
             DemoControls(
+                source = source,
+                onSource = { repo.source.value = it },
                 throttle = throttle,
-                onThrottle = { autoSweep = false; throttle = it },
+                onThrottle = { autoSweep = false; repo.throttle.value = it },
                 autoSweep = autoSweep,
                 onAutoSweep = { autoSweep = it },
+                coldStart = coldStart != null,
+                onColdStart = { on -> repo.coldStartAtSec.value = if (on) System.nanoTime() / 1e9 else null },
+                key = key,
+                onKey = { repo.key.value = it },
             )
         }
 
         // ── Body ─────────────────────────────────────────────────────────────
-        // Only the visible page is composed (plus its neighbour mid-swipe), so hidden
-        // pages cost nothing.
+        // Only the visible page (plus its neighbour mid-swipe) is composed, so hidden
+        // pages — including their animations — cost nothing.
         HorizontalPager(
             state = pager,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             pageSpacing = 24.dp,
         ) { page ->
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                 when (ClusterView.entries[page]) {
                     ClusterView.CLUSTER -> ClusterBody(car, boostUnit, peakBoostKPa)
                     ClusterView.DRIVELINE -> DrivelineBody(car)
                     ClusterView.OFFROAD -> OffRoadBody(car)
+                    ClusterView.ECONOMY -> EconomyPage(car, economy, onResetTrip = repo::resetTrip)
+                    ClusterView.AIR -> AirPage(car, boostUnit)
+                    ClusterView.ENGINE -> EnginePage(car)
                 }
             }
         }
@@ -186,8 +219,11 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
             horizontalArrangement = Arrangement.spacedBy(28.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FooterStat("Fuel", "%.1f L/h".format(car.fuelRateLh))
-            FooterStat("Peak boost", "${formatBoost(boostFromKPa(peakBoostKPa, boostUnit), boostUnit)} ${boostUnit.label}")
+            FooterStat("Fuel", "${car.fuelRateLh.fmt("%.1f")} L/h")
+            FooterStat(
+                "Peak boost",
+                if (peakBoostKPa.isNaN()) "–" else "${formatBoost(boostFromKPa(peakBoostKPa, boostUnit, car.baroKPa), boostUnit)} ${boostUnit.label}",
+            )
             Text(
                 "Reset peak",
                 style = LabelStyle,
@@ -198,7 +234,8 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
             Spacer(Modifier.weight(1f))
-            if (showDemoControls) FrameRateStat() else FooterStat("Polling", "10.4 Hz")
+            if (showDemoControls) FrameRateStat()
+            else FooterStat("Polling", if (source == DataSource.DEMO) "demo 20 Hz" else if (link.hz > 0f) "%.1f Hz".format(link.hz) else "–")
         }
     }
 }
@@ -208,7 +245,7 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore) {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 @Composable
-private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) {
+private fun ClusterBody(car: VehicleState, unit: BoostUnit, peakKPa: Float) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
         Row(
             Modifier.fillMaxWidth(),
@@ -216,7 +253,14 @@ private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TachometerGauge(rpm = car.rpm, size = 224.dp)
-            BoostGauge(boostKPa = car.boostKPa, peakKPa = peakKPa, unit = unit, size = 256.dp, targetKPa = car.targetBoostKPa)
+            BoostGauge(
+                boostKPa = car.boostKPa,
+                peakKPa = if (peakKPa.isNaN()) car.boostKPa else peakKPa,
+                unit = unit,
+                size = 256.dp,
+                targetKPa = car.targetBoostKPa,
+                baroKPa = if (car.baroKPa.isNaN()) 100f else car.baroKPa,
+            )
             SpeedometerGauge(speedKmH = car.speedKmH, size = 224.dp)
         }
         Row(
@@ -242,7 +286,7 @@ private fun ClusterBody(car: SimulatedVehicle, unit: BoostUnit, peakKPa: Float) 
 }
 
 @Composable
-private fun DrivelineBody(car: SimulatedVehicle) {
+private fun DrivelineBody(car: VehicleState) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(32.dp),
@@ -253,7 +297,7 @@ private fun DrivelineBody(car: SimulatedVehicle) {
             TachometerGauge(
                 rpm = car.rpm,
                 size = 330.dp,
-                gear = car.gear,
+                gear = car.gear ?: "–",
                 gearColor = if (car.lockup == LockupState.SLIP) IngweCaution else IngweAccent,
             )
         }
@@ -276,7 +320,7 @@ private fun DrivelineBody(car: SimulatedVehicle) {
 }
 
 @Composable
-private fun OffRoadBody(car: SimulatedVehicle) {
+private fun OffRoadBody(car: VehicleState) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(32.dp),
@@ -302,14 +346,14 @@ private fun OffRoadBody(car: SimulatedVehicle) {
 
 @Composable
 private fun ViewTabs(selected: ClusterView, onSelect: (ClusterView) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         ClusterView.entries.forEach { tab ->
             val isSelected = tab == selected
             Column(
                 Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { onSelect(tab) }
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -400,10 +444,16 @@ private fun FrameRateStat() {
 
 @Composable
 private fun DemoControls(
+    source: DataSource,
+    onSource: (DataSource) -> Unit,
     throttle: Float,
     onThrottle: (Float) -> Unit,
     autoSweep: Boolean,
     onAutoSweep: (Boolean) -> Unit,
+    coldStart: Boolean,
+    onColdStart: (Boolean) -> Unit,
+    key: IgnitionState,
+    onKey: (IgnitionState) -> Unit,
 ) {
     Row(
         Modifier
@@ -414,6 +464,12 @@ private fun DemoControls(
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        SegmentedControl(
+            options = DataSource.entries.map { it to it.label },
+            selected = source,
+            onSelect = onSource,
+        )
+        Spacer(Modifier.width(16.dp))
         Text("Throttle", style = LabelStyle, color = IngweTextSecondary)
         Spacer(Modifier.width(10.dp))
         Text(
@@ -440,80 +496,53 @@ private fun DemoControls(
             onSelect = onThrottle,
         )
         Spacer(Modifier.width(8.dp))
+        SegmentedControl(options = listOf(true to "Sweep"), selected = autoSweep, onSelect = { onAutoSweep(!autoSweep) })
+        Spacer(Modifier.width(8.dp))
+        SegmentedControl(options = listOf(true to "Cold start"), selected = coldStart, onSelect = { onColdStart(!coldStart) })
+        Spacer(Modifier.width(8.dp))
         SegmentedControl(
-            options = listOf(true to "Sweep"),
-            selected = autoSweep,
-            onSelect = { onAutoSweep(!autoSweep) },
+            options = listOf(IgnitionState.OFF to "Off", IgnitionState.ON to "On", IgnitionState.CRANKING to "Crank", IgnitionState.RUNNING to "Run"),
+            selected = key,
+            onSelect = onKey,
         )
     }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
- * Simulation
- * ──────────────────────────────────────────────────────────────────────────── */
-
-/** Plausible vehicle state for a given throttle position (0 = idle, 1 = full load). */
-internal data class SimulatedVehicle(
-    val rpm: Float,
-    val boostKPa: Float,
-    val targetBoostKPa: Float,
-    val engineLoadPct: Float,
-    val speedKmH: Float,
-    val coolantC: Float,
-    val oilC: Float,
-    val batteryV: Float,
-    val fuelRateLh: Float,
-    val egtC: Float,
-    val chargeAirC: Float,
-    val vgtPct: Float,
-    val torqueNm: Float,
-    val gear: String,
-    val lockup: LockupState,
-    val atfTempC: Float,
-    val steeringDeg: Float,
-    val pitchDeg: Float,
-    val rollDeg: Float,
-    val wheelSlip: WheelSlip,
-    val rearDiff: DiffState,
-    val rearTorquePct: Float,
-) {
-    companion object {
-        private val GEAR_UPSHIFT_KMH = floatArrayOf(15f, 32f, 50f, 70f, 92f, 112f, 130f)
-
-        fun at(throttle: Float): SimulatedVehicle {
-            val t = throttle.coerceIn(0f, 1f)
-            val speed = t * 135f
-            val gearIndex = GEAR_UPSHIFT_KMH.indexOfFirst { speed < it }.let { if (it == -1) 8 else it + 1 }
-            // Rear wheels slip more under load; the Torsen centre diff biases torque
-            // away from the slipping axle (nominal 40:60). Rear locker engages at heavy load.
-            val slip = t * 18f
-            val wheels = WheelSlip(fl = slip * 0.45f, fr = slip * 0.6f, rl = slip * 0.95f, rr = slip * 1.15f)
-            val rearSlipBias = (wheels.rl + wheels.rr) / 2f - (wheels.fl + wheels.fr) / 2f
-            return SimulatedVehicle(
-                rpm = 800f + t * 3500f,
-                boostKPa = 95f + t * 165f,
-                targetBoostKPa = 100f + t * 170f, // ECU request runs slightly ahead of actual
-                engineLoadPct = (15f + t * 75f).coerceAtMost(100f),
-                speedKmH = speed,
-                coolantC = 88f + t * 8f,
-                oilC = 92f + t * 14f,
-                batteryV = 14.2f - t * 0.3f,
-                fuelRateLh = 1.2f + t * 14.5f,
-                egtC = 310f + t * 470f,
-                chargeAirC = 30f + t * 28f,
-                vgtPct = 35f + t * 55f,
-                torqueNm = 110f + t * 470f,
-                gear = "D$gearIndex",
-                // Converter unlocks under heavy load (the old `speed < 50` guard made this unreachable).
-                lockup = if (t > 0.9f) LockupState.SLIP else LockupState.LOCKED,
-                atfTempC = 82f + t * 14f,
-                steeringDeg = t * 30f - 15f,
-                pitchDeg = t * 18f - 4f,
-                rollDeg = t * 14f - 3f,
-                wheelSlip = wheels,
-                rearDiff = if (t > 0.8f) DiffState.LOCKED else DiffState.OPEN,
-                rearTorquePct = (60f - rearSlipBias * 1.5f).coerceIn(35f, 65f),
-            )
-        }
+/**
+ * Explains what's (not) live for the current key position. With the ignition off the
+ * engine computer sleeps, so the only reading is battery voltage, measured by the
+ * adapter itself at the OBD port.
+ */
+@Composable
+private fun IgnitionBanner(car: VehicleState) {
+    val v = car.batteryV
+    val batteryColor = when {
+        v.isNaN() -> IngweTextTertiary
+        car.ignition == IgnitionState.OFF && v < 12.2f -> IngweAlert   // resting battery getting flat
+        car.ignition == IgnitionState.OFF && v < 12.4f -> IngweCaution
+        car.ignition == IgnitionState.CRANKING && v < 9.6f -> IngweAlert // weak battery under starter load
+        else -> IngweTeal
+    }
+    val detail = when (car.ignition) {
+        IgnitionState.OFF -> "Engine computer asleep · only the adapter's battery reading is live"
+        IgnitionState.ON -> "Readings live · engine values at rest"
+        IgnitionState.CRANKING -> "Starter turning · watch the voltage dip"
+        IgnitionState.RUNNING -> ""
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(IngweSurface)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(if (car.ignition == IgnitionState.CRANKING) IngweCaution else IngweTextTertiary))
+        Spacer(Modifier.width(10.dp))
+        Text(car.ignition.label, style = LabelStyle.copy(fontSize = 13.sp), color = IngweTextPrimary)
+        Spacer(Modifier.width(12.dp))
+        Text(detail, style = LabelStyle.copy(fontSize = 13.sp), color = IngweTextSecondary, modifier = Modifier.weight(1f), maxLines = 1)
+        Text("Battery  ", style = LabelStyle.copy(fontSize = 13.sp), color = IngweTextSecondary)
+        Text("${v.fmt("%.1f")} V", style = ReadoutSmall, color = batteryColor)
     }
 }

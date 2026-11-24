@@ -1,0 +1,13 @@
+# Baseline profile for Ingwe.
+#
+# Tells Android Runtime (ART) which code to compile ahead of time at install, instead
+# of interpreting it on first launch. ProfileInstaller applies it on sideloaded
+# installs too. The Compose libraries ship their own profiles; this covers our code.
+#
+#   H = hot (called often)   S = startup   P = post-startup
+#   L... = class to preload
+#
+# Everything in the app is small and on the hot path (gauges draw every frame,
+# the poller runs ~10x a second), so we simply mark all of it.
+HSPLio/ingwe/dash/**;->**(**)**
+Lio/ingwe/dash/**;
