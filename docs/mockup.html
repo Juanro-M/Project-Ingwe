@@ -1791,7 +1791,7 @@ document.getElementById('demoLink').addEventListener('click', () => {
 buildDials();
 document.getElementById('demo').hidden = true;
 const initial = new URLSearchParams(location.search).get('tab') || location.hash.slice(1);
-setView(['cluster', 'driveline', 'offroad', 'faults'].includes(initial) ? initial : 'cluster');
+setView(['cluster', 'driveline', 'offroad', 'economy', 'air', 'engine', 'faults'].includes(initial) ? initial : 'cluster');
 render();
 if (!new URLSearchParams(location.search).has('nointro')) playIntro(); else document.getElementById('intro').hidden = true;
 </script>

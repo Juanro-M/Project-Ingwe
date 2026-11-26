@@ -6,8 +6,8 @@ Kotlin · Jetpack Compose · custom Canvas gauges · read-only by design
 
 ![Cluster](docs/screenshots/01_turbo_cluster.png)
 
-> **Status — milestone M1.** The UI is complete and runs on simulated data (use **Demo** in the header to drive the throttle). The BLE adapter transport is stubbed and lands in M3.
-> Try it in a browser first: open [`docs/mockup.html`](docs/mockup.html) — it mirrors the Android screens.
+> **Status — milestone M1 (v0.4.1).** Six pages are complete and run on simulated data (use **Demo** in the header to drive the throttle). The OBD polling pipeline (ELM327 driver, ISO-TP, poll scheduler) is built and tested against a mock adapter; the BLE transport lands in M3.
+> Try it in a browser first: open [`docs/mockup.html`](docs/mockup.html) — it mirrors the Android screens (add `?tab=economy`, `air` or `engine` to jump to a page).
 
 ---
 
@@ -60,6 +60,37 @@ The main screen (shown at the top): three primary dials, three sub-dials and fou
 
 > Per-wheel slip, rear-lock state and torque split are simulated in M1; their UDS identifiers are not yet in `signals.json`.
 
+### Economy
+
+![Economy](docs/screenshots/05_economy.png)
+
+- **Consumption now** — arc gauge in L/100 km (0 – 30) with the trip average marked.
+- **Last 30 seconds** — rolling bar history against the trip average.
+- **Fuel** — tank level, estimated range and litres remaining.
+- **This trip** — distance, time, average, average speed, fuel used and idle time. **Reset** starts a new trip.
+
+### Air
+
+![Air](docs/screenshots/06_air.png)
+
+- **Air path** — animated flow from outside air through MAF, turbo, intercooler and manifold to the engine, coloured by temperature.
+- **Altitude** — estimated from the barometer, with barometric pressure and air density versus sea level.
+- **Outside** — ambient temperature and heat soak (intake air against outside air).
+- **Airflow health** — a 0 – 100 score comparing measured MAF to expected, plus boost versus target and charge-air temperature.
+
+> Compressor-out temperature is estimated, and the expected-MAF figure needs a VW UDS identifier that isn't confirmed yet.
+
+### Engine
+
+![Engine](docs/screenshots/07_engine.png)
+
+- **Cylinders** — V6 layout with per-cylinder injector correction (mg/stroke) and a balance chart; amber and red as a cylinder drifts from the others.
+- **Glow system** — per-plug resistance, open-circuit detection and heater phase.
+- **Common rail** — pressure against target (0 – 2,000 bar).
+- **EGR valve** — percent open, with a butterfly-valve symbol that rotates as it opens.
+
+> Injector corrections and glow-plug resistance come from VW UDS identifiers that are unconfirmed; the page shows them as unavailable until the ECU answers.
+
 ### Fault codes
 
 ![Fault codes](docs/screenshots/04_dtc_diagnostics.png)
@@ -100,27 +131,32 @@ Defined in [`app/src/main/assets/signals.json`](app/src/main/assets/signals.json
 
 | ID | Signal | ECU | Svc | PID / DID | Formula | Unit | Range | Verified |
 |---|---|---|---|---|---|---|---|:---:|
-| `rpm` | Engine speed | 7E0 | 01 | 0C | `((A*256)+B)/4` | rpm | 0 – 5000 | ✓ |
-| `vehicle_speed` | Vehicle speed | 7E0 | 01 | 0D | `A` | km/h | 0 – 200 | ✓ |
+| `rpm` | Engine speed | 7E0 | 01 | 0C | `((A*256)+B)/4` | rpm | 0 – 6000 | ✓ |
+| `vehicle_speed` | Speed | 7E0 | 01 | 0D | `A` | km/h | 0 – 220 | ✓ |
+| `boost_actual` | Manifold pressure | 7E0 | 01 | 0B | `A` | kPa abs | 0 – 255 | ✓ |
+| `boost_target` | Boost target | 7E0 | 01 | 70 | `((B*256)+C)*0.03125` | kPa abs | 0 – 400 | – |
+| `engine_torque` | Engine torque | 7E0 | 01 | 62 | `(A-125)*5.8` | Nm | 0 – 700 | – |
 | `engine_load` | Engine load | 7E0 | 01 | 04 | `A*100/255` | % | 0 – 100 | ✓ |
-| `coolant_temp` | Coolant | 7E0 | 01 | 05 | `A-40` | °C | −40 – 130 | ✓ |
-| `intake_air_temp` | Intake air | 7E0 | 01 | 0F | `A-40` | °C | −40 – 100 | ✓ |
-| `oil_temp` | Engine oil | 7E0 | 01 | 5C | `A-40` | °C | −40 – 160 | ✓ |
-| `battery_voltage` | Battery | 7E0 | 01 | 42 | `((A*256)+B)/1000` | V | 10 – 16 | ✓ |
+| `maf` | Mass airflow | 7E0 | 01 | 10 | `((A*256)+B)/100` | g/s | 0 – 400 | ✓ |
+| `turbo_vgt` | VGT vane position | 7E0 | 01 | 71 | `C*100/255` | % | 0 – 100 | – |
+| `egt_pre_turbo` | EGT pre-turbo | 7E0 | 01 | 78 | `((B*256)+C)/10-40` | °C | 0 – 1000 | ✓ |
 | `fuel_rate` | Fuel rate | 7E0 | 01 | 5E | `((A*256)+B)*0.05` | L/h | 0 – 50 | ✓ |
-| `boost_actual` | Boost, actual | 7E0 | 01 | 6F | `B` | kPa abs | 0 – 400 | ✓ |
-| `boost_target` | Boost, target | 7E0 | 01 | 70 | `B` | kPa abs | 0 – 400 | – |
-| `egt_pre_turbo` | EGT pre-turbo | 7E0 | 01 | 78 | `((C*256)+D)*0.1-40` | °C | 0 – 1000 | ✓ |
+| `coolant_temp` | Coolant | 7E0 | 01 | 05 | `A-40` | °C | −40 – 130 | ✓ |
+| `oil_temp` | Oil | 7E0 | 01 | 5C | `A-40` | °C | −40 – 160 | ✓ |
+| `intake_air_temp` | Intake air | 7E0 | 01 | 0F | `A-40` | °C | −40 – 100 | ✓ |
 | `charge_air_temp` | Charge air | 7E0 | 01 | 77 | `B-40` | °C | −20 – 120 | ✓ |
-| `turbo_vgt_duty` | VGT vane position | 7E0 | 01 | 7D | `A*100/255` | % | 0 – 100 | – |
-| `engine_torque` | Engine torque | 7E0 | 01 | 62 | `((A*256)+B)-500` | Nm | 0 – 750 | ✓ |
-| `trans_fluid_temp` | ATF temperature | 7E1 | 22 | 11A8 | `A-40` | °C | 0 – 150 | ✓ |
-| `trans_gear` | Gear | 7E1 | 22 | 1002 | `A` | — | 1 – 8 | ✓ |
-| `trans_lockup` | Converter lockup | 7E1 | 22 | 1003 | `A` | state | 0 – 2 | ✓ |
-| `steering_angle` | Steering angle | 7E2 | 22 | 0250 | `((A*256)+B)*0.1-540` | ° | −540 – 540 | ✓ |
-| `wheel_slip` | Wheel slip | 7E2 | 22 | 0251 | `A*0.5` | % | 0 – 50 | ✓ |
-| `pitch_angle` | Pitch | 7E2 | 22 | 0252 | `A-45` | ° | −45 – 45 | ✓ |
-| `roll_angle` | Roll | 7E2 | 22 | 0253 | `A-45` | ° | −45 – 45 | ✓ |
+| `battery_voltage` | Battery | 7E0 | 01 | 42 | `((A*256)+B)/1000` | V | 10 – 16 | ✓ |
+| `fuel_level` | Fuel level | 7E0 | 01 | 2F | `A*100/255` | % | 0 – 100 | – |
+| `baro` | Barometer | 7E0 | 01 | 33 | `A` | kPa | 50 – 110 | ✓ |
+| `ambient_temp` | Ambient | 7E0 | 01 | 46 | `A-40` | °C | −40 – 60 | – |
+| `fuel_rail` | Fuel rail pressure | 7E0 | 01 | 23 | `((A*256)+B)/10` | bar | 0 – 2000 | ✓ |
+| `egr_commanded` | EGR commanded | 7E0 | 01 | 2C | `A*100/255` | % | 0 – 100 | ✓ |
+| `trans_fluid_temp` | ATF temperature | 7E1 | 22 | 11A8 | `A-40` | °C | 0 – 150 | – |
+| `trans_gear` | Current gear | 7E1 | 22 | 1002 | `A` | gear | 1 – 8 | – |
+| `trans_lockup` | Converter lockup | 7E1 | 22 | 1003 | `A` | state | 0 – 2 | – |
+| `steering_angle` | Steering angle | 7E2 | 22 | 0250 | `((A*256)+B)*0.1-540` | ° | −540 – 540 | – |
+| `pitch_angle` | Pitch | 7E2 | 22 | 0252 | `A-45` | ° | −45 – 45 | – |
+| `roll_angle` | Roll | 7E2 | 22 | 0253 | `A-45` | ° | −45 – 45 | – |
 
 Signals marked – haven't been confirmed on a real ECU yet.
 
