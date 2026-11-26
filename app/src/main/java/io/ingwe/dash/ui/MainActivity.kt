@@ -5,8 +5,15 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
+import io.ingwe.dash.ui.theme.IngweBackground
 import androidx.compose.runtime.snapshotFlow
+import io.ingwe.dash.ui.components.FitToDesignSize
 import io.ingwe.dash.ui.navigation.IngweNavHost
 import io.ingwe.dash.ui.theme.IngweTheme
 import io.ingwe.dash.ui.theme.IngweThemeState
@@ -28,7 +35,10 @@ class MainActivity : ComponentActivity() {
                 snapshotFlow { IngweThemeState.isLight }.collect { prefs.edit().putBoolean(KEY_LIGHT, it).apply() }
             }
             IngweTheme {
-                IngweNavHost()
+                // Scale to the space left after the head unit's status / nav bars.
+                Box(Modifier.fillMaxSize().background(IngweBackground).safeDrawingPadding()) {
+                    FitToDesignSize { IngweNavHost() }
+                }
             }
         }
     }

@@ -63,7 +63,12 @@ fun EconomyPage(car: VehicleState, economy: Economy, onResetTrip: () -> Unit) {
                 title = "Last 30 seconds · L/100 km",
                 trailing = { Text("trip avg ${economy.averageL100.fmt("%.1f")}", style = PageSmall, color = IngweTextSecondary) },
             ) {
-                ConsumptionHistory(economy.history, economy.averageL100)
+                Box {
+                    Column { ConsumptionHistory(economy.history, economy.averageL100) }
+                    if (economy.history.size < 4) {
+                        Text("Collecting · fills over 30 s of driving", style = PageLabel, color = IngweTextTertiary, modifier = Modifier.align(Alignment.Center))
+                    }
+                }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -72,7 +77,7 @@ fun EconomyPage(car: VehicleState, economy: Economy, onResetTrip: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
                 val litres = car.fuelLevelPct / 100f * TANK_LITRES
                 val range = if (economy.averageL100.isNaN()) Float.NaN else litres / economy.averageL100 * 100f
-                Row(horizontalArrangement = Arrangement.spacedBy(32.dp), verticalAlignment = Alignment.Bottom) {
+                Row(horizontalArrangement = Arrangement.spacedBy(32.dp), verticalAlignment = Alignment.Top) {
                     PageStat("Range", range.fmt(), "km", big = true)
                     PageStat("In tank", litres.fmt(), "L")
                 }

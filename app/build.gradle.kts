@@ -14,8 +14,8 @@ android {
         // Head units often report a spoofed Android version; many UIS8581A units really run Android 9/10.
         minSdk = 24
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.1-M1"
+        versionCode = 6
+        versionName = "0.4.2-M1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -45,6 +45,12 @@ android {
         compose = true
     }
 
+    // Screenshot tests render real Compose screens on the JVM (Robolectric) — no emulator needed.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.systemProperty("roborazzi.test.record", "true") }
+    }
+
     packaging {
         resources.excludes += setOf("META-INF/{AL2.0,LGPL2.1}", "DebugProbesKt.bin", "kotlin-tooling-metadata.json")
     }
@@ -70,6 +76,12 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

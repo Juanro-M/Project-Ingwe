@@ -296,9 +296,9 @@
 
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" data-view="cluster" aria-selected="true">Cluster</button>
+      <button class="tab" role="tab" data-view="economy" aria-selected="false">Economy</button>
       <button class="tab" role="tab" data-view="driveline" aria-selected="false">Driveline</button>
       <button class="tab" role="tab" data-view="offroad" aria-selected="false">Off-road</button>
-      <button class="tab" role="tab" data-view="economy" aria-selected="false">Economy</button>
       <button class="tab" role="tab" data-view="air" aria-selected="false">Air</button>
       <button class="tab" role="tab" data-view="engine" aria-selected="false">Engine</button>
     </nav>
@@ -1619,7 +1619,7 @@ function renderFaults() {
     </div>`).join('');
 }
 
-const PAGES = ['cluster', 'driveline', 'offroad', 'economy', 'air', 'engine'];
+const PAGES = ['cluster', 'economy', 'driveline', 'offroad', 'air', 'engine']; // most-used first
 function setView(view) {
   const from = PAGES.indexOf(state.view), to = PAGES.indexOf(view);
   state.view = view;

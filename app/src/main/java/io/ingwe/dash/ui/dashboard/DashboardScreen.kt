@@ -40,23 +40,24 @@ import io.ingwe.dash.ui.pages.SourceTag
 import io.ingwe.dash.ui.theme.*
 import kotlinx.coroutines.launch
 
+/** Pages in order of how often they're likely to be used (tabs and swipe follow this order). */
 private enum class ClusterView(val label: String) {
-    CLUSTER("Cluster"),
-    DRIVELINE("Driveline"),
-    OFFROAD("Off-road"),
-    ECONOMY("Economy"),
-    AIR("Air"),
-    ENGINE("Engine"),
+    CLUSTER("Cluster"),     // everyday driving
+    ECONOMY("Economy"),     // fuel, range, trip — every drive
+    DRIVELINE("Driveline"), // gear, ATF, load — towing / long drives
+    OFFROAD("Off-road"),    // only when off the tar
+    AIR("Air"),             // altitude, outside air, airflow health
+    ENGINE("Engine"),       // glow plugs & injectors — diagnostics
 }
 
 /**
  * Main instrument cluster for the VW Amarok 3.0 V6 TDI.
  *
- * Pages (swipe or tap the tabs):
+ * Pages (swipe or tap the tabs), most-used first:
  *   Cluster   — tacho, boost (+ target), speed; VGT / coolant / oil sub-dials; EGT, charge air, torque, battery
+ *   Economy   — instant consumption, 30 s history, fuel tank & range, trip computer
  *   Driveline — tacho with gear in the hub; ZF 8HP load, torque, lockup, ATF; coolant & oil
  *   Off-road  — roll and pitch clinometers; 4Motion steering, per-wheel slip, diff state, torque split
- *   Economy   — instant consumption, 30 s history, fuel tank & range, trip computer
  *   Air       — animated air path, altitude, outside air, airflow health
  *   Engine    — V6 cylinders with glow plugs & injector corrections, rail, EGR
  *
@@ -64,9 +65,9 @@ private enum class ClusterView(val label: String) {
  * adapter) is chosen in the demo bar.
  */
 @Composable
-fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: VehicleRepository) {
+fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: VehicleRepository, initialPage: Int = 0) {
     var boostUnit by rememberSaveable { mutableStateOf(BoostUnit.BAR) }
-    val pager = rememberPagerState(pageCount = { ClusterView.entries.size })
+    val pager = rememberPagerState(initialPage = initialPage, pageCount = { ClusterView.entries.size })
     val view = ClusterView.entries[pager.currentPage]
     val scope = rememberCoroutineScope()
 

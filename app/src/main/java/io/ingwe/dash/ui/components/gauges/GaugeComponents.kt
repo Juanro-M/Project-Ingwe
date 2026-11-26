@@ -733,17 +733,6 @@ fun TransmissionPanel(
     Panel(
         modifier = modifier,
         title = "ZF 8HP transmission",
-        trailing = {
-            StatusDot(
-                text = lockup?.let { "Converter ${it.label.lowercase()}" } ?: "Converter –",
-                color = when (lockup) {
-                    LockupState.LOCKED -> IngweTeal
-                    LockupState.SLIP -> IngweCaution
-                    LockupState.OPEN -> IngweCool
-                    null -> IngweTextTertiary
-                },
-            )
-        },
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Stat("Engine load", engineLoadPct.fmt(), unit = "%", large = true, modifier = Modifier.weight(1f))
