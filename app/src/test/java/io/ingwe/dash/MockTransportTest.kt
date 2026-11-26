@@ -64,9 +64,9 @@ class MockTransportTest {
 
     @Test fun `custom response override works`() = runTest {
         transport.connect()
-        transport.customResponses["ATTEST"] = listOf("CUSTOM_RESPONSE")
+        transport.customResponses["ATI"] = listOf("CUSTOM_RESPONSE")
         val lines = mutableListOf<String>()
-        transport.send("ATTEST").collect { lines.add(it) }
+        transport.send("ATI").collect { lines.add(it) }
         assertTrue("CUSTOM_RESPONSE" in lines)
     }
 

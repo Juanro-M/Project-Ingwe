@@ -1,4 +1,6 @@
-# How Ingwe works
+# How Argus works
+
+> Argus was called Ingwe early on, so internal code names (`io.ingwe.dash`, `IngweTheme` …) still use the old name. The package ID stays the same so updates install over the existing app and keep your data.
 
 A guided tour of everything between the OBD port under your dash and the needle moving on the screen, written so you can learn it, not just read it. Each section ends with **where it lives in the code**.
 
@@ -181,21 +183,55 @@ Each gauge animates towards each new value on a **damped spring** (`NeedleSpring
 
 ---
 
-## 8. Safety: read-only by design
+## 8. Safety: read-only, always
 
-Some diagnostic services can **change** things in the car: clear codes, reset modules, run actuator tests, write settings. Every command goes through `TransportGuard` **before** it reaches the adapter:
+Some diagnostic services can **change** things in the car: clear codes, reset modules, run actuator tests, write settings, reprogram. Argus can't do any of it. Every command goes through `TransportGuard` **before** it leaves the head unit:
 
-- Allowed: `01` live data, `03`/`07`/`0A` fault codes, `09` vehicle info, UDS `19` read codes, UDS `22` read data. Plus `AT`/`ST` adapter commands.
-- Blocked: everything else (`10` session control, `11` reset, `27` security access, `2E` write, `2F` actuator control, `31` routines…).
-- `04` / UDS `14` (clear codes) stay blocked unless deliberately unlocked.
-- Spaces are stripped before checking. The ELM ignores spaces, so `0 4` **is** Mode 04; an early version let that through.
+- **Car requests:** only read-only services are allowed:
+  - `01` live data
+  - `03`/`07`/`0A` read fault codes
+  - `09` vehicle info
+  - UDS `19` read codes
+  - UDS `22` read data
 
-`TransportAllowlistTest` proves each rule. It must always pass.
+  Everything else is rejected (`04`/`14` clear codes, `10` session control, `11` reset, `27` security access, `2E` write, `2F` actuator control, `31` routines). **There is no setting that unlocks more.** The list is fixed in the code, and the app has no "clear codes" button. That's left to a workshop tool.
+- **Adapter commands:** only an explicit list of harmless setup and status commands is allowed (reset, echo/spaces/headers, protocol, timing, which ECU to address, battery voltage, sleep). The chip's extended commands are blocked, because some of them could bypass the rule above:
+  - `STPX` transmits arbitrary raw frames.
+  - `ATMA` floods the link by monitoring all bus traffic.
+  - `ATPP` writes the adapter's own memory.
+  - `ATWM` sends periodic wake-up messages to modules.
+- **No session changes:** Argus never asks a module to enter a special diagnostic session, so every module stays in its normal driving mode.
+- **Spaces stripped first:** the adapter ignores spaces, so `0 4` *is* Mode 04. It's normalised before checking.
+
+`TransportAllowlistTest` proves every rule (including each blocked adapter command), and it runs on every build.
 
 > **Code:** `data/transport/TransportGuard.kt`, `ServiceAllowlist.kt`
 
----
+## 8b. Reliability: never in the car's way
 
+- **Bus load cap:** the poller never runs more than ~12 cycles a second (`MIN_CYCLE_MS`), however fast the adapter answers. A few small requests per cycle is a tiny fraction of a 500 kbit/s bus.
+- **One question at a time:** the driver sends one command and waits for its reply before the next. It never floods the adapter or the ECU.
+- **Polite timeouts:** if the ECU doesn't answer, the request times out and that signal is *parked* for ~30 s instead of being re-asked every cycle.
+- **Only while visible:** polling stops completely when the app is in the background.
+
+## 8c. Power: protecting the battery
+
+The adapter sits in the OBD port, which has **permanent battery power** (pin 16), so it matters what happens when you park.
+
+| Situation | What Argus does | Bus traffic |
+|---|---|---|
+| Driving | Normal polling (≤ 12 cycles/s) | Diagnostic requests only |
+| Ignition off | Battery voltage every 5 s via `ATRV` (measured *inside the adapter*) | **None** for voltage |
+| Ignition off | "Is the engine ECU awake?" check | One tiny request every 30 s |
+| Engine started | Voltage jumps above 13.2 V (alternator) → check immediately | — |
+| Parked 10 min, or battery < 12.0 V | Adapter told to sleep (`ATLP`, a few mA); polling stops until you tap **Wake** or reopen the app | **None** |
+| App closed / head unit off | Adapter told to sleep (`ATLP`) | **None** |
+
+Most head units are switched by ACC, so they turn off with the key anyway. These rules make sure that even a head unit with permanent power can't drain the battery or keep the truck's modules awake. **Tip:** choose an adapter with an automatic low-power mode (the vLinker MC+ has one), and unplug it if the truck will stand for weeks.
+
+> **Code:** `VehicleRepository.runElm`, `PollScheduler.MIN_CYCLE_MS`
+
+---
 ## 9. Ignition states: what works when
 
 | State | How we know | What's live |
@@ -205,7 +241,7 @@ Some diagnostic services can **change** things in the car: clear codes, reset mo
 | **Cranking** | 0 < rpm < 400 | Watch battery voltage dip under starter load; below ~9.6 V suggests a weak battery |
 | **Running** | rpm ≥ 400 | Full polling |
 
-If the ECU stops answering mid-drive (key off), the poller notices after 5 silent cycles and drops back to the ignition-off loop. A banner under the header explains the current state.
+If the ECU stops answering mid-drive (key off), the poller notices after 5 silent cycles and drops back to the ignition-off loop. A banner under the header explains the current state, and offers **Wake adapter** once it has been put to sleep.
 
 **Can we get RPM without OBD?** No. RPM, boost and temperatures live only in the engine computer. Without OBD the head unit itself can still offer:
 - **GPS speed** (it has a GPS receiver), useful as a speed fallback.
@@ -270,10 +306,32 @@ Colours are read from `IngweThemeState`, which is Compose "snapshot state". Anyt
 | **Resource shrinking** | Drops unused images and strings | Smaller APK |
 | **Baseline profile** (`src/main/baseline-prof.txt`) | Lists code to compile ahead of time | Android pre-compiles it at install instead of interpreting it on first launch |
 | **ProfileInstaller** library | Applies that profile even for sideloaded APKs | Without it, a non-Play-Store install would ignore the profile |
-| **Splash window background** | The logo is drawn by Android itself | Something branded appears instantly, before any app code runs |
+| **Splash window background** | A plain background drawn by Android itself | The screen is the right colour instantly, before any app code runs; the eye intro then opens on the same background |
 | **minSdk 24** | Installs on Android 7+ | Your head unit claims Android 15 but really runs older Android |
 
 > **Code:** `app/build.gradle.kts`, `app/src/main/baseline-prof.txt`, `res/drawable/splash_background.xml`
+
+### The start-up eye
+
+The intro (`ui/components/Intro.kt`) is one `Animatable` clock running for about 4 s. The eye, the letters of the name and the "Welcome back" line all read that clock in the **draw phase** (`Canvas` and `graphicsLayer`), so nothing recomposes per frame. The dot-grid backdrop is built once into a handful of `drawPoints` calls. When the overlay has faded it leaves the composition entirely, so it costs nothing afterwards.
+
+---
+
+## 12b. The service log: storage without a database
+
+The Service page stores everything in **one JSON file** (`files/service_log.json`, a few kB):
+
+- It's read once at start-up on a background thread, then held in memory as a `StateFlow`.
+- Every save rewrites the whole file **atomically**: write `service_log.json.tmp`, then rename it over the old file. A rename is all-or-nothing, so a power cut mid-write leaves the previous log intact, never half a file.
+- Nothing is written while driving or per frame — only when you tap Save, Delete or Correct (plus the odometer, at most once every 10 km).
+- The page only reads the **odometer** from the live data, so the 20 Hz stream doesn't recompose it.
+- Dates are plain `yyyy-mm-dd` strings with a small built-in date calculation, because Android's `java.time` needs Android 8+ and the app still installs on Android 7.
+
+**Odometer:** OBD-II PID `A6` (4 bytes, 0.1 km) when the engine ECU supports it — many 2017–2019 ECUs don't, in which case the scheduler parks it after three empty replies and the page uses the last known or corrected reading.
+
+**Owner's manual:** the system file picker returns a `content://` link to your own PDF; the app asks Android to keep read permission and stores only the link. Nothing is bundled, so the APK stays small.
+
+> **Code:** `data/service/ServiceStore.kt`, `ServiceLog.kt`, `ui/service/ServicePage.kt`, `LogSheet.kt`
 
 ---
 
@@ -283,12 +341,12 @@ Colours are read from `IngweThemeState`, which is Compose "snapshot state". Anyt
 .\gradlew.bat testDebugUnitTest
 ```
 
-79 unit tests, all running against the simulated adapter:
+117 tests: logic tests against the simulated adapter, plus screenshot tests of every page (and the start-up eye) at three head-unit screen sizes:
 - **ISO-TP:** single, multi-frame, header line, out-of-order, no-space format.
 - **Parser and formulas:** standard formulas, short replies, malformed formulas, negative responses.
 - **Driver:** init, support discovery, **6 PIDs in one round trip**, header caching, UDS reads, ignition off with voltage still readable.
 - **Scheduler:** polls, decodes, parks unanswered signals.
-- **Safety:** every blocked service and bypass attempt.
+- **Safety:** every blocked service, every blocked adapter command, and every bypass attempt.
 
 In the app, **Demo → Mock ELM** runs the whole pipeline live. The header shows "Mock ELM · 21/26 signals" (the manufacturer signals get parked because the mock engine ECU doesn't answer for the other modules), and the footer shows the real cycle rate.
 
@@ -307,11 +365,13 @@ app/src/main/
     │   ├── isotp/                 multi-frame reassembly
     │   ├── obd/                   formulas, PID lengths, reply parsing
     │   ├── poll/PollScheduler.kt  what to ask for, when
+    │   ├── service/               service log, schedule, JSON store
     │   ├── signals/               signals.json loader
-    │   └── vehicle/               VehicleState, repository, mock ECU
+    │   └── vehicle/               VehicleState, repository, mock ECU, demo drive
     └── ui/
         ├── components/gauges/     dials, bars, VGT, clinometers, 4Motion
         ├── pages/                 Economy, Air, Engine
+        ├── service/               Service page, log sheet
         ├── dashboard/             pager, header, demo bar
         ├── dtc/  terminal/        fault codes, raw terminal
         └── theme/                 palettes, typography

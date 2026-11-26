@@ -7,6 +7,9 @@ import io.ingwe.dash.data.signals.SignalDefinition
 import io.ingwe.dash.data.transport.MockTransport
 import io.ingwe.dash.data.transport.Transport
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +21,7 @@ import kotlinx.coroutines.launch
 enum class DataSource(val label: String) { DEMO("Demo"), MOCK_ELM("Mock ELM"), ADAPTER("Adapter") }
 
 /** What the header/footer show about the data link. */
-data class LinkStatus(val text: String, val ok: Boolean, val hz: Float = 0f)
+data class LinkStatus(val text: String, val ok: Boolean, val hz: Float = 0f, val asleep: Boolean = false)
 
 /** Trip computer + 30-second consumption history, updated twice a second. */
 @Immutable
@@ -53,6 +56,8 @@ class VehicleRepository(
     val coldStartAtSec = MutableStateFlow<Double?>(null)
     /** Demo key position (Demo and Mock ELM sources). */
     val key = MutableStateFlow(IgnitionState.RUNNING)
+    /** Demo Sweep: speed / rpm / gear from [DemoDrive] while it runs (null = plain throttle simulation). */
+    private val drive = MutableStateFlow<DemoDrive.Sample?>(null)
 
     private val _state = MutableStateFlow(VehicleState.simulated(0.55f))
     val state: StateFlow<VehicleState> = _state.asStateFlow()
@@ -86,7 +91,30 @@ class VehicleRepository(
 
     private fun nowSec() = System.nanoTime() / 1e9
 
-    private fun demoState() = VehicleState.simulated(throttle.value, nowSec(), coldStartAtSec.value, key.value)
+    private fun demoState(): VehicleState {
+        val s = VehicleState.simulated(throttle.value, nowSec(), coldStartAtSec.value, key.value)
+        val d = drive.value ?: return s
+        return if (s.ignition == IgnitionState.RUNNING) s.copy(speedKmH = d.speedKmH, rpm = d.rpm, gear = "D${d.gear}") else s
+    }
+
+    /** Demo Sweep: drives the throttle and the little vehicle model until cancelled (~30 updates/s). */
+    suspend fun runSpiritedDrive() {
+        val model = DemoDrive()
+        val t0 = System.nanoTime()
+        var last = t0
+        try {
+            while (true) {
+                val now = System.nanoTime()
+                val sample = model.step((now - t0) / 1e9f, ((now - last) / 1e9f).coerceAtMost(0.05f))
+                last = now
+                throttle.value = model.throttle
+                drive.value = sample
+                delay(33)
+            }
+        } finally {
+            drive.value = null
+        }
+    }
 
     /** Demo: 20 updates a second straight from the simulation (the gauges' springs smooth the rest). */
     private suspend fun runDemo() {
@@ -97,7 +125,25 @@ class VehicleRepository(
         }
     }
 
-    /** ELM source: connect, then poll forever; on failure, show why and retry with backoff. */
+    private val wakeRequests = MutableStateFlow(0)
+
+    /** User tapped "Wake adapter" after it was put to sleep to protect the battery. */
+    fun wake() { wakeRequests.value++ }
+
+    /**
+     * ELM source: connect, then poll; on failure, show why and retry with backoff.
+     *
+     * Battery protection while parked (ignition off):
+     *  - Battery voltage comes from the adapter itself (ATRV), which puts NOTHING on
+     *    the CAN bus, so it can't wake the truck's modules. Read every [VOLT_EVERY_MS].
+     *  - The engine ECU is only asked "are you awake?" every [ECU_PROBE_EVERY_MS],
+     *    so the bus is never kept busy. A jump above [ENGINE_RUNNING_V] (alternator
+     *    charging) means the engine started, and we probe straight away.
+     *  - After [SLEEP_AFTER_MS] parked, or as soon as the battery drops below
+     *    [LOW_BATTERY_V], the adapter is told to sleep (ATLP, a few mA) and polling
+     *    stops completely until you tap "Wake" or reopen the app.
+     *  - When the app closes, the adapter is put to sleep as well.
+     */
     private suspend fun runElm(transport: Transport, label: String) {
         var backoffMs = 1_000L
         while (true) {
@@ -106,16 +152,41 @@ class VehicleRepository(
                 _link.value = LinkStatus("$label · connecting…", ok = false)
                 driver.connect()
                 backoffMs = 1_000L
+                var parkedSinceMs = 0L
                 while (true) {
                     if (!driver.ecuAwake()) {
-                        // Ignition off: the ECU is asleep. Read only the adapter's battery voltage,
-                        // slowly, and check every 2 s whether the key has been turned.
-                        val volts = driver.readVoltage() ?: Float.NaN
+                        val now = System.currentTimeMillis()
+                        if (parkedSinceMs == 0L) parkedSinceMs = now
+                        var volts = driver.readVoltage() ?: Float.NaN
                         _state.value = VehicleState.ignitionOff(volts)
+
+                        val lowBattery = !volts.isNaN() && volts < LOW_BATTERY_V
+                        if (lowBattery || now - parkedSinceMs >= SLEEP_AFTER_MS) {
+                            runCatching { driver.command("ATLP") } // adapter low-power sleep
+                            _link.value = LinkStatus(
+                                if (lowBattery) "$label · asleep · battery low" else "$label · asleep to save battery",
+                                ok = true, asleep = true,
+                            )
+                            val seen = wakeRequests.value
+                            wakeRequests.first { it != seen }         // wait for the user, no traffic at all
+                            driver.connect()                          // ATZ wakes the adapter
+                            parkedSinceMs = 0L
+                            continue
+                        }
+
                         _link.value = LinkStatus("$label · ignition off", ok = true)
-                        delay(2_000)
+                        // Watch voltage (adapter-only, no bus traffic) until the next ECU probe.
+                        var waited = 0L
+                        while (waited < ECU_PROBE_EVERY_MS) {
+                            delay(VOLT_EVERY_MS)
+                            waited += VOLT_EVERY_MS
+                            volts = driver.readVoltage() ?: Float.NaN
+                            _state.value = VehicleState.ignitionOff(volts)
+                            if (!volts.isNaN() && volts >= ENGINE_RUNNING_V) break // alternator charging → engine started
+                        }
                         continue
                     }
+                    parkedSinceMs = 0L
                     // Ignition on: rediscover supported PIDs (they can differ by key state) and poll.
                     var silentCycles = 0
                     try {
@@ -130,7 +201,11 @@ class VehicleRepository(
                     }
                 }
             } catch (e: CancellationException) {
-                runCatching { driver.disconnect() }
+                // App closed or backgrounded: leave the adapter asleep, drawing almost nothing.
+                withContext(NonCancellable) {
+                    runCatching { driver.command("ATLP", timeoutMs = 500) }
+                    runCatching { driver.disconnect() }
+                }
                 throw e
             } catch (e: Exception) {
                 _link.value = LinkStatus("$label · ${e.message ?: "error"}", ok = false)
@@ -181,3 +256,9 @@ class VehicleRepository(
 
 /** Thrown inside the poll loop when the ECU stops answering (ignition switched off). */
 private class EcuAsleep : Exception()
+
+private const val VOLT_EVERY_MS = 5_000L
+private const val ECU_PROBE_EVERY_MS = 30_000L
+private const val SLEEP_AFTER_MS = 10 * 60_000L
+private const val LOW_BATTERY_V = 12.0f
+private const val ENGINE_RUNNING_V = 13.2f

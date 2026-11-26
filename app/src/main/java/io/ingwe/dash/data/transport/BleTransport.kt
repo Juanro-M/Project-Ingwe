@@ -61,7 +61,7 @@ class BleTransport(private val context: Context) : Transport {
     }
 
     companion object {
-        private const val TAG = "Ingwe/BleTransport"
+        private const val TAG = "Argus/BleTransport"
 
         // Known BLE UART service / characteristic UUIDs
         // Write characteristic: adapter reads OBD commands from here

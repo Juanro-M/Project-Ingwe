@@ -30,6 +30,7 @@ object MockEcu {
         0x71 -> u8(s.vgtPct * 255f / 100f)?.let { byteArrayOf(0x03, it[0], it[0], 0, 0, 0) }
         0x77 -> u8(s.chargeAirC + 40f)?.let { byteArrayOf(0x01, it[0], 0, 0, 0) }
         0x78 -> u16((s.egtC + 40f) * 10f)?.let { byteArrayOf(0x01, it[0], it[1], 0, 0, 0, 0, 0, 0) }
+        0xA6 -> if (s.odometerKm.isNaN()) null else (s.odometerKm * 10f).toLong().let { v -> byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte()) }
         else -> null
     }
 

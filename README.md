@@ -1,19 +1,22 @@
-# Project Ingwe 🐆
+# Argus 👁
 
 **A glanceable digital cluster for the VW Amarok 3.0 V6 TDI** — boost, turbo, ZF 8HP and 4Motion telemetry over OBD-II / UDS, built for 1280×720 landscape Android head units (Unisoc UIS8581A / TS18 / OYIN).
 
 Kotlin · Jetpack Compose · custom Canvas gauges · read-only by design
 
+![Argus start-up](docs/screenshots/00_intro.png)
+
 ![Cluster](docs/screenshots/01_turbo_cluster.png)
 
-> **Status — milestone M1 (v0.4.1).** Six pages are complete and run on simulated data (use **Demo** in the header to drive the throttle). The OBD polling pipeline (ELM327 driver, ISO-TP, poll scheduler) is built and tested against a mock adapter; the BLE transport lands in M3.
-> Try it in a browser first: open [`docs/mockup.html`](docs/mockup.html) — it mirrors the Android screens (add `?tab=economy`, `air` or `engine` to jump to a page).
+> **Status — milestone M1 (v0.5.0).** Seven pages are complete and run on simulated data (use **Demo** in the header to drive the throttle; **Sweep** runs a spirited drive loop). The Service page keeps a real maintenance log. The OBD polling pipeline (ELM327 driver, ISO-TP, poll scheduler) is built and tested against a mock adapter; the BLE transport lands in M3.
+> Try it in a browser first: open [`docs/mockup.html`](docs/mockup.html) — it mirrors the Android screens (add `?tab=economy`, `air`, `engine` or `service` to jump to a page).
 
 ---
 
 ## Contents
 
 - [Screens](#screens)
+- [Service page](#service)
 - [Design](#design)
 - [Safety](#safety)
 - [Signals](#signals)
@@ -24,6 +27,8 @@ Kotlin · Jetpack Compose · custom Canvas gauges · read-only by design
 ---
 
 ## Screens
+
+Seven pages, most-used first, in a rounded tab dock with a line icon per page: **Cluster · Economy · Driveline · Off-road · Air · Engine · Service**. Swipe or tap. Start-up is a short "all-seeing eye" animation (about 4 s, tap to skip) that hands over to an ignition sweep of every gauge.
 
 ### Cluster
 
@@ -38,7 +43,7 @@ The main screen (shown at the top): three primary dials, three sub-dials and fou
 | Coolant / Oil | 40 – 130 °C / 40 – 150 °C | Blue until operating temperature, then teal; amber and red near the limit |
 | EGT pre-turbo | 200 – 900 °C | Caution 720 °C, alert 780 °C |
 | Charge air | 0 – 90 °C | Caution 55 °C, alert 70 °C |
-| Engine torque, battery | 0 – 650 Nm, 10 – 16 V | |
+| Engine torque, battery | 0 – 700 Nm, 10 – 16 V | |
 
 ### Driveline (ZF 8HP)
 
@@ -91,14 +96,27 @@ The main screen (shown at the top): three primary dials, three sub-dials and fou
 
 > Injector corrections and glow-plug resistance come from VW UDS identifiers that are unconfirmed; the page shows them as unavailable until the ECU answers.
 
+### Service
+
+![Service](docs/screenshots/08_service.png)
+
+- **Next oil service** — km to go (or overdue), the due point, a progress bar and the oil spec.
+- **Coming up** — every job on one odometer axis: a bar from when it was last done to when it's due, filled up to today, with an orange **NOW** line. Intervals marked **?** aren't confirmed for the SA truck yet — check the service booklet.
+- **Odometer** — read from the car (OBD-II PID `A6`) when the ECU supports it; otherwise the last known reading, and you can **Correct** it.
+- **Service log** — tap **+ Log** to add a visit: pick a package (Minor, Major, Gearbox, 4×4 drivetrain, Brakes) which pre-ticks the usual items, tick or untick anything, and add your own jobs (repairs, upgrades, one-offs). Tap an entry to edit it; **Delete** takes two taps. No prices anywhere.
+- **Specs & fluids** — oil (VW 505 01, 5W-30 / 5W-40, 8.0 L), coolant, transfer case and diff fluids, brake fluid and disc limits, tyre pressures and wheel-bolt torque, from HaynesPro data for the DDXA engine.
+- **Owner's manual** — pick your own PDF once; after that it opens in one tap. Nothing is bundled in the app.
+
+The log is one small JSON file in the app's private storage, written atomically (temp file, then rename) and only when you save — no database.
+
 ### Fault codes
 
 ![Fault codes](docs/screenshots/04_dtc_diagnostics.png)
 
 - Stored, pending and permanent codes from the engine ECU (`0x7E0`, Bosch EDC17).
 - Tap a code for its freeze frame and common Amarok causes.
-- **Clear codes** asks for confirmation first (see [Safety](#safety)).
-- The cluster shows a quiet banner and a red **Faults** count while any code is stored.
+- Read-only: codes can't be cleared from the app — use a workshop tool (see [Safety](#safety)).
+- While any code is stored, the **Faults** button in the header turns into a red capsule with the count, and a soft glint passes across it every few seconds.
 
 ---
 
@@ -106,7 +124,10 @@ The main screen (shown at the top): three primary dials, three sub-dials and fou
 
 - **Colour means something.** Greys carry the layout. Amber marks the hero dials and the active tab; teal means "in normal range"; blue is cold or vacuum; amber-yellow is caution; red is over the limit.
 - **Numbers don't jump.** All readouts use tabular figures.
-- **No chrome.** No glows, gradients or coloured borders — space and hairlines group things.
+- **No chrome.** No glows, gradients or coloured borders on the working screens — space groups things. (The start-up eye is the one place that glows.)
+- **Dark and light.** Tap **Dark / Light** in the header; light mode deepens the signal colours so they hold up in sunlight.
+
+![Cluster in light mode](docs/screenshots/09_cluster_light.png)
 
 Theme tokens live in [`Theme.kt`](app/src/main/java/io/ingwe/dash/ui/theme/Theme.kt); gauges in [`ui/components/gauges/`](app/src/main/java/io/ingwe/dash/ui/components/gauges).
 
@@ -114,11 +135,14 @@ Theme tokens live in [`Theme.kt`](app/src/main/java/io/ingwe/dash/ui/theme/Theme
 
 ## Safety
 
-Ingwe is a **read-only** tool. Every command passes through [`TransportGuard`](app/src/main/java/io/ingwe/dash/data/transport/TransportGuard.kt) before it reaches the adapter:
+Argus is a **read-only** tool. Every command passes through [`TransportGuard`](app/src/main/java/io/ingwe/dash/data/transport/TransportGuard.kt) before it reaches the adapter:
 
 - Only these services are allowed: `01` live data, `03` / `07` / `0A` fault codes, `09` vehicle info, UDS `19` read DTCs and `22` read data.
 - Write, reset, security-access, routine and actuator services are rejected.
-- Clearing codes (`04`, UDS `14`) is blocked until explicitly unlocked, and the UI confirms before clearing.
+- Clearing codes (`04`, UDS `14`) is never allowed — there is no unlock.
+- Adapter commands are limited to a short read-only list (no `ST` commands, no monitor-all or settings writes).
+- Polling is capped at about 12 cycles a second, so diagnostic traffic stays a tiny share of the CAN bus.
+- Parked with the ignition off, only the adapter's own voltage reading runs (no bus traffic); after 10 minutes, or if the battery drops below 12.0 V, the adapter is put to sleep (a few mA) until you tap **Wake**. Closing the app puts it to sleep too.
 - Whitespace is stripped first (the ELM327 ignores it, so `0 4` is Mode 04), and malformed input is rejected rather than passed through.
 
 [`TransportAllowlistTest`](app/src/test/java/io/ingwe/dash/TransportAllowlistTest.kt) covers each rule.
@@ -157,6 +181,7 @@ Defined in [`app/src/main/assets/signals.json`](app/src/main/assets/signals.json
 | `steering_angle` | Steering angle | 7E2 | 22 | 0250 | `((A*256)+B)*0.1-540` | ° | −540 – 540 | – |
 | `pitch_angle` | Pitch | 7E2 | 22 | 0252 | `A-45` | ° | −45 – 45 | – |
 | `roll_angle` | Roll | 7E2 | 22 | 0253 | `A-45` | ° | −45 – 45 | – |
+| `odometer` | Odometer | 7E0 | 01 | A6 | `((A*16777216)+(B*65536)+(C*256)+D)/10` | km | 0 – 999999 | – |
 
 Signals marked – haven't been confirmed on a real ECU yet.
 
@@ -164,7 +189,7 @@ Signals marked – haven't been confirmed on a real ECU yet.
 
 ## Build and test
 
-Requirements: JDK 17 and the Android SDK (compile SDK 35, min SDK 31).
+Requirements: JDK 17 and the Android SDK (compile SDK 35, min SDK 24).
 
 ```powershell
 .\gradlew.bat assembleDebug
@@ -174,7 +199,7 @@ Requirements: JDK 17 and the Android SDK (compile SDK 35, min SDK 31).
 .\gradlew.bat testDebugUnitTest
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Unit tests cover ISO-TP reassembly, response parsing, formula evaluation, the mock adapter and the safety allowlist.
+The APK is written to `app/build/outputs/apk/debug/app-debug.apk` (`assembleRelease` gives a smaller, faster R8-optimised build). 117 unit tests cover ISO-TP reassembly, response parsing, formula evaluation, the mock adapter and the safety allowlist, plus JVM screenshot tests that render every page at 1280×720, 853×480 and 1024×600 into `app/build/screenshots/`.
 
 ---
 

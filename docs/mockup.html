@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AmarokDash — cluster preview</title>
+<title>Argus — cluster preview</title>
 <style>
   :root {
     --bg: #0B0B0C;
@@ -41,7 +41,6 @@
     --on-accent: #FFFFFF;
     --page: #D9D9D5;
   }
-  * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--page); transition: background .25s; }
   .unit { transition: background .25s; }
   body {
@@ -73,24 +72,70 @@
   /* Ignition intro (mirrors IgnitionIntro in Intro.kt) */
   .intro { position: absolute; inset: 0; background: var(--bg); display: grid; place-items: center; z-index: 10; cursor: pointer; }
   .intro[hidden] { display: none; }
-  .intro .logo { width: 168px; height: 168px; grid-area: 1 / 1; }
-  .intro .word { grid-area: 1 / 1; transform: translateY(76px); color: var(--text-2); font-size: 15px; letter-spacing: 6px; }
+  /* Intro backdrop: a fine dot grid that fades out toward the edges, a faint warm glow at the
+     centre, and a very slow drift so it feels alive without being noticed */
+  .intro::before, .intro::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+  .intro::before {
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--text) 9%, transparent) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(ellipse 55% 60% at 50% 46%, #000 0%, transparent 100%);
+            mask-image: radial-gradient(ellipse 55% 60% at 50% 46%, #000 0%, transparent 100%);
+    animation: introDrift 14s linear infinite;
+  }
+  .intro::after { background: radial-gradient(ellipse 40% 45% at 50% 44%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%); }
+  @keyframes introDrift { to { background-position: 22px 22px; } }
+  @media (prefers-reduced-motion: reduce) { .intro::before { animation: none; } }
+  .intro > * { position: relative; z-index: 1; }
+  .intro .eye-wrap { grid-area: 1 / 1; width: 440px; height: 240px; transform: translateY(-30px); }
+  .intro .eye-wrap canvas { width: 100%; height: 100%; display: block; }
+  .intro .word { grid-area: 1 / 1; transform: translateY(118px); color: var(--text); font-size: 22px; font-weight: 300; letter-spacing: 14px; padding-left: 14px; opacity: 0; display: flex; }
+  .intro .word span { display: inline-block; opacity: 0; will-change: opacity, filter, transform; }
+  .intro .word-sub { grid-area: 1 / 1; transform: translateY(150px); color: var(--text-3); font-size: 12px; letter-spacing: 2px; opacity: 0; }
 
   /* Header */
   header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
   .vehicle { font-size: 14px; }
   .status { display: flex; align-items: center; gap: 6px; color: var(--text); margin-top: 2px; }
   .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
-  .tabs { display: flex; gap: 4px; }
-  .tab { padding: 6px 14px; border-radius: 8px; font-size: 14px; color: var(--text-3); display: flex; flex-direction: column; align-items: center; gap: 5px; }
-  .tab::after { content: ""; width: 18px; height: 2px; border-radius: 1px; background: transparent; }
+  /* Tabs: one rounded dock, a soft capsule slides under the active page (CarPlay-like, kept quiet) */
+  .tabs { position: relative; display: flex; gap: 2px; padding: 4px; background: var(--surface); border-radius: 16px; }
+  .tab-pill { position: absolute; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 12px; background: var(--surface-high);
+    transition: transform .32s cubic-bezier(.3,1.2,.4,1), width .32s cubic-bezier(.3,1.2,.4,1); pointer-events: none; }
+  .tab { position: relative; z-index: 1; padding: 6px 12px 5px; min-width: 70px; border-radius: 12px; font-size: 13px; color: var(--text-3);
+    display: flex; flex-direction: column; align-items: center; gap: 3px; transition: color .2s; }
+  .tab svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .tab[aria-selected="true"] { color: var(--text); }
-  .tab[aria-selected="true"]::after { background: var(--accent); }
+  .tab[aria-selected="true"] svg { stroke: var(--accent); }
   .tab:hover { color: var(--text-2); }
+  .tab:active { transform: scale(.96); }
+
+  /* Scrollbars: thin, floating, only noticeable when you need them */
+  @supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text-3) 55%, transparent) transparent; } }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-3) 32%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  /* faint at rest (touch screens have no hover), brighter when you reach for it */
+  :hover::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--text-3) 60%, transparent); }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--text-3); }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  .seg-lg { border-radius: 12px; padding: 3px; }
+  .seg-lg button { padding: 6px 14px; border-radius: 9px; font-size: 13px; }
   .actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
   .link { font-size: 13px; color: var(--text-2); padding: 6px 8px; border-radius: 8px; }
   .link:hover { background: var(--surface); }
-  .link.alert { color: var(--alert); }
+  /* Stored codes: the Faults button becomes a soft red capsule with a count badge; a thin light glint
+     passes across it every few seconds — noticeable, never nagging */
+  .link.alert { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 7px; color: var(--alert);
+    background: color-mix(in srgb, var(--alert) 12%, transparent); border-radius: 999px; padding: 5px 6px 5px 12px; }
+  .link.alert:hover { background: color-mix(in srgb, var(--alert) 20%, transparent); }
+  .link .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--alert); color: #fff;
+    font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .link.alert::after { content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 30%; pointer-events: none;
+    background: linear-gradient(100deg, transparent, color-mix(in srgb, #fff 28%, transparent), transparent);
+    transform: skewX(-18deg); animation: faultGlint 4.5s ease-in-out infinite; }
+  @keyframes faultGlint { 0%, 62% { left: -40%; } 85%, 100% { left: 130%; } }
+  @media (prefers-reduced-motion: reduce) { .link.alert::after { animation: none; display: none; } }
   .link.on { color: var(--accent); }
 
   .seg { display: inline-flex; background: var(--surface); border-radius: 8px; padding: 2px; }
@@ -187,6 +232,131 @@
   #cv-rail { height: 78px; }
   #cv-egr { height: 70px; }
   #cv-gearbox { height: 72px; }
+
+  /* Service */
+  .svc-top { display: grid; grid-template-columns: 1fr 300px; gap: 12px; }
+  .svc-card { background: var(--surface); border-radius: 14px; padding: 12px 16px; }
+  .svc-card.hero { display: grid; grid-template-columns: auto 1fr; column-gap: 28px; align-items: center; }
+  .svc-card.hero .v { font-size: 34px; }
+  .svc-card.hero .bar { height: 6px; border-radius: 3px; }
+  .odo-card .v { font-size: 28px; font-weight: 300; }
+  .odo-card .odo-row { margin: 2px 0 0; }
+  /* Timeline: one row per job — label · track (last done → due, filled up to today) · remaining */
+  .tl { position: relative; display: grid; grid-template-columns: 150px 1fr 128px; row-gap: 7px; align-items: center; }
+  .tl-name { font-size: 13px; color: var(--text); white-space: nowrap; }
+  .tl-name small { color: var(--text-3); font-size: 11px; margin-left: 4px; }
+  .tl-track { position: relative; height: 10px; border-radius: 5px; background: var(--surface-high); }
+  .tl-span { position: absolute; top: 0; bottom: 0; border-radius: 5px; overflow: hidden; background: color-mix(in srgb, var(--c) 18%, transparent); }
+  .tl-span i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--c); opacity: .85; }
+  .tl-due { position: absolute; top: 50%; width: 3px; height: 16px; margin: -8px 0 0 -1.5px; border-radius: 2px; background: var(--c); }
+  .tl-msg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--text-3); white-space: nowrap; }
+  .tl-left { text-align: right; font-size: 13px; color: var(--c); white-space: nowrap; }
+  .tl-left small { color: var(--text-3); font-size: 11px; margin-left: 3px; }
+  .tl-axis { grid-column: 2; position: relative; height: 14px; font-size: 11px; color: var(--text-3); }
+  .tl-axis span { position: absolute; transform: translateX(-50%); }
+  .tl-now { position: absolute; top: -4px; bottom: 16px; width: 2px; margin-left: -1px; background: var(--accent); border-radius: 1px; pointer-events: none; }
+  .tl-now b { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: .4px; }
+  .tl-legend { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+  .tl-legend i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; background: var(--teal); }
+  .tl-legend i.lg-due { width: 3px; height: 12px; border-radius: 2px; }
+  .svc-card.hero { background: var(--surface-high); }
+  .svc-card .k { color: var(--text-2); font-size: 13px; display: flex; justify-content: space-between; }
+  .svc-card .v { font-size: 28px; font-weight: 300; margin-top: 2px; }
+  .svc-card .u { color: var(--text-3); font-size: 13px; margin-left: 5px; }
+  .svc-card .bar { height: 4px; border-radius: 2px; background: var(--hairline); margin-top: 8px; overflow: hidden; }
+  .svc-card .bar i { display: block; height: 100%; }
+  .svc-card .s { font-size: 12px; color: var(--text-3); margin-top: 6px; }
+  .svc-switch { display: flex; align-items: center; justify-content: space-between; }
+  .svc-overview { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+  .svc-overview[hidden], .svc-specs[hidden] { display: none !important; }
+  .svc-specs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; overflow: auto; align-content: start; flex: 1; min-height: 0; }
+  .spec-card { background: var(--surface); border-radius: 14px; padding: 12px 16px; }
+  .spec-card h4 { margin: 0 0 8px; font-size: 14px; font-weight: 500; color: var(--text-2); display: flex; justify-content: space-between; }
+  .spec-card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  .spec-card dt { color: var(--text-3); }
+  .spec-card dd { margin: 0; color: var(--text); text-align: right; }
+  .spec-card .note { margin-top: 8px; font-size: 12px; color: var(--text-2); line-height: 1.4; }
+  .spec-card .hl { color: var(--accent); }
+  /* Service page: tighter vertical rhythm so the log keeps room at 720 px */
+  section[data-view="service"] { gap: 10px !important; padding-top: 10px !important; }
+  .svc-overview { gap: 10px; }
+  .svc-top .svc-card { padding: 10px 16px; }
+  .svc-card.hero .v { font-size: 30px; }
+  .svc-plan { padding: 12px 18px 10px; }
+  .svc-plan .panel-head, .svc-log .panel-head, .svc-side .panel-head { margin-bottom: 8px; }
+  .svc-log, .svc-side { padding: 12px 18px; }
+  .tl { row-gap: 5px; }
+  .tl-track { height: 8px; border-radius: 4px; }
+  .tl-span, .tl-span i { border-radius: 4px; }
+  .tl-due { height: 14px; margin-top: -7px; }
+  .log-row { padding: 6px 8px; }  /* Service overview: left = what's due, right = odometer + full-height log */
+  .svc-overview { display: grid !important; grid-template-columns: 1fr 380px; gap: 12px; flex: 1; min-height: 0; }
+  .svc-main, .svc-rail { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .svc-main .svc-plan { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .svc-main .tl { flex: 1; align-content: space-between; padding-top: 18px; row-gap: 9px; }
+  .svc-main .tl-track { height: 10px; border-radius: 5px; }
+  .svc-rail .svc-log { flex: 1; }
+  .svc-rail .log-row { grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 10px; }
+  .svc-rail .log-row > div:first-child { display: flex; align-items: baseline; gap: 8px; grid-column: 1; }
+  .svc-rail .log-row > div:nth-child(2) { grid-column: 1 / -1; }
+  .svc-rail .log-row .edit { grid-row: 1; grid-column: 2; }
+  .svc-rail .log-row .items { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .manual-row { display: flex; justify-content: space-between; align-items: center; background: var(--surface); border-radius: 14px; padding: 12px 16px; font-size: 14px; color: var(--text-2); text-align: left; }
+  .manual-row:hover { background: var(--surface-high); }
+  .manual-act { font-size: 12px; color: var(--accent); }  .svc-bottom { display: grid; grid-template-columns: 1fr 300px; gap: 12px; flex: 1; min-height: 0; }
+  .svc-side { display: flex; flex-direction: column; }
+  .side-sep { height: 1px; background: var(--hairline); margin: 10px 0; }
+  .odo-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .svc-log { display: flex; flex-direction: column; min-height: 0; }
+  .odo-big { font-size: 28px; font-weight: 300; margin-bottom: 4px; }
+  .odo-edit { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--text-2); }
+  .odo-edit[hidden] { display: none; }
+  .odo-edit input { font: inherit; font-size: 15px; width: 110px; color: var(--text); background: var(--surface-high); border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 8px; }
+  .manual-txt { font-size: 13px; color: var(--text-2); line-height: 1.45; }
+  .log-list { display: flex; flex-direction: column; overflow: auto; flex: 1; min-height: 0; }
+  .log-row { display: grid; grid-template-columns: 96px 1fr auto; gap: 14px; align-items: center; padding: 8px; border-radius: 10px; cursor: pointer; }
+  .log-row + .log-row { border-top: 1px solid var(--hairline); }
+  .log-row:hover { background: var(--surface-high); }
+  .log-row .km { font-size: 15px; color: var(--text); }
+  .log-row .d { color: var(--text-3); font-size: 12px; }
+  .log-row .t { font-size: 15px; color: var(--text); }
+  .log-row .items { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+  .log-row .edit { font-size: 12px; color: var(--text-3); }
+  .log-empty { color: var(--text-3); font-size: 13px; padding: 16px 8px; }  #logForm { margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
+  /* Log-a-service sheet */
+  .sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 8; }
+  :root[data-theme="light"] .sheet-backdrop { background: rgba(0,0,0,.25); }
+  .sheet { width: min(980px, 92%); background: var(--surface); border: 1px solid var(--hairline); border-radius: 16px; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; }
+  .sheet-head { display: flex; align-items: center; }
+  .sheet-head .title { flex: 1; font-size: 18px; font-weight: 500; }
+  .sheet-row { display: flex; gap: 10px; }
+  .sheet-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+  .sheet-row label.grow { flex: 1; }
+  .sheet input, .sheet textarea { font: inherit; font-size: 14px; color: var(--text); background: var(--surface-high); border: 1px solid var(--hairline); border-radius: 8px; padding: 6px 9px; }
+  .sheet textarea { width: 100%; resize: none; }
+  .sheet-row input[type=number] { width: 110px; }
+  .sheet-label { font-size: 12px; color: var(--text-3); margin-bottom: 4px; }
+  .pkg-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pkg { padding: 7px 12px; border-radius: 8px; background: var(--surface-high); color: var(--text-2); font-size: 13px; }
+  .pkg[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+  .sheet-cols { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+  .items-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
+  .items-grid label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); padding: 4px 0; cursor: pointer; }
+  .items-grid input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .custom-add { display: flex; gap: 6px; }
+  .custom-add input { flex: 1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; min-height: 24px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 14px; background: var(--surface-high); font-size: 13px; }
+  .chip button { color: var(--text-3); padding: 0 4px; }
+  .sheet-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .foot-btns { display: flex; gap: 8px; }
+  .btn.destructive.confirm { background: var(--alert); color: #fff; }
+  #sfHint { font-size: 12px; color: var(--text-3); }
+  .log-row .items { font-size: 12px; color: var(--text-2); }
+  #logForm[hidden] { display: none; }
+  .lf-row { display: flex; gap: 6px; }
+  .lf-row input:not([type=number]):not([type=date]) { flex: 1; }
+  .lf-row input[type=number] { width: 80px; }
   .chassis { display: flex; align-items: center; gap: 8px; }
   .chassis .labels { height: 150px; padding: 30px 0 12px; display: flex; flex-direction: column; justify-content: space-between; font-size: 16px; color: var(--text-2); }
   .chassis .labels.left { text-align: right; }
@@ -266,7 +436,9 @@
   .empty p { color: var(--text-2); margin: 0; font-size: 13px; }
 
   /* Footer */
-  footer { border-top: 1px solid var(--hairline); padding-top: 10px; display: flex; align-items: center; gap: 28px; }
+  footer { padding-top: 8px; display: flex; align-items: center; gap: 28px; }
+  footer[hidden] { display: none !important; }
+
   footer .k { color: var(--text-3); margin-right: 8px; }
   footer .v { color: var(--text-2); font-size: 13px; }
   footer .grow { flex: 1; }
@@ -294,13 +466,14 @@
       <div class="status"><span class="dot" style="background:var(--caution)"></span>Demo data · ECU 7E0</div>
     </div>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab" role="tab" data-view="cluster" aria-selected="true">Cluster</button>
-      <button class="tab" role="tab" data-view="economy" aria-selected="false">Economy</button>
-      <button class="tab" role="tab" data-view="driveline" aria-selected="false">Driveline</button>
-      <button class="tab" role="tab" data-view="offroad" aria-selected="false">Off-road</button>
-      <button class="tab" role="tab" data-view="air" aria-selected="false">Air</button>
-      <button class="tab" role="tab" data-view="engine" aria-selected="false">Engine</button>
+    <nav class="tabs" role="tablist"><span class="tab-pill" id="tabPill"></span>
+      <button class="tab" role="tab" data-view="cluster" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></svg>Cluster</button>
+      <button class="tab" role="tab" data-view="economy" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19c0-8 6-13 14-13 0 8-5 13-13 13"/><path d="M5 19l7-7"/></svg>Economy</button>
+      <button class="tab" role="tab" data-view="driveline" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Driveline</button>
+      <button class="tab" role="tab" data-view="offroad" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19l6-10 4 6 2-3 6 7z"/></svg>Off-road</button>
+      <button class="tab" role="tab" data-view="air" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h11a3 3 0 1 0-3-3"/><path d="M3 14h15a3 3 0 1 1-3 3"/></svg>Air</button>
+      <button class="tab" role="tab" data-view="engine" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h3l2-3h6v3h3v8h-3l-2 2H9l-2-3H4z"/></svg>Engine</button>
+      <button class="tab" role="tab" data-view="service" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0-5 5L4 17l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>Service</button>
     </nav>
 
     <div class="actions">
@@ -312,7 +485,7 @@
         <button data-unit="bar" aria-pressed="true">bar</button>
         <button data-unit="psi" aria-pressed="false">psi</button>
       </div>
-      <button class="link alert" id="faultsLink" data-view="faults">Faults&nbsp;&nbsp;3</button>
+      <button class="link alert" id="faultsLink" data-view="faults">Faults <span class="badge">3</span></button>
       <button class="link" id="demoLink">Demo</button>
     </div>
   </header>
@@ -510,6 +683,32 @@
       </div>
     </section>
 
+    <!-- Service: remaining intervals, timeline, log -->
+    <section class="view" data-view="service" hidden style="justify-content:flex-start;gap:12px;padding-top:12px">
+      <div class="svc-switch"><div class="seg seg-lg" id="svcTabs"><button data-svc="overview" aria-pressed="true">Overview</button><button data-svc="specs" aria-pressed="false">Specs &amp; fluids</button></div><span class="src">Amarok 3.0 TDI · engine DDXA · 2017–2019</span></div>
+      <div class="svc-overview" id="svcOverview">
+        <div class="svc-main">
+          <div class="svc-card hero" id="svcHero"></div>
+          <div class="panel svc-plan">
+            <div class="panel-head"><span class="title">Coming up</span><span class="tl-legend"><i class="lg-done"></i>driven since last &nbsp;<i class="lg-due"></i>due</span></div>
+            <div class="tl" id="tl"></div>
+          </div>
+        </div>
+        <div class="svc-rail">
+          <div class="svc-card odo-card">
+            <div class="k"><span>Odometer</span><span id="odoSrc">From car · OBD-II</span></div>
+            <div class="odo-row"><span class="v num" id="odoBig">–</span><button class="mini" id="odoFix">Correct</button></div>
+            <div class="odo-edit" id="odoEdit" hidden><input id="odo" class="num" type="number" step="1" value="134000"> km <button class="mini" id="odoSave">Save</button></div>
+          </div>
+          <div class="panel svc-log">
+            <div class="panel-head"><span class="title">Service log</span><button class="btn primary" id="logAdd">+ Log</button></div>
+            <div class="log-list" id="logList"></div>
+          </div>
+          <button class="manual-row" id="manualOpen"><span>Owner's manual</span><span class="manual-act" id="manualAct">Open PDF ›</span></button>
+        </div>
+      </div>
+      <div class="svc-specs" id="svcSpecs" hidden></div>
+    </section>
     <!-- Faults -->
     <section class="view" data-view="faults" hidden style="justify-content:flex-start;padding:16px 0 12px">
       <div class="faults-head">
@@ -555,26 +754,49 @@
     <span id="fpsStat" hidden><span class="k">Frame rate</span><span class="v num" id="fps">–</span></span>
   </footer>
 
+  <div class="sheet-backdrop" id="logSheet" hidden>
+    <form class="sheet" id="sheetForm">
+      <div class="sheet-head"><span class="title" id="sheetTitle">Log a service</span><button type="button" class="mini" id="sheetClose">Cancel</button></div>
+      <div class="sheet-row">
+        <label>Date<input id="sfDate" type="date"></label>
+        <label>Odometer<input id="sfKm" type="number" class="num" placeholder="km"></label>
+        <label class="grow">Workshop<input id="sfShop" placeholder="e.g. VW Menlyn, or DIY"></label>
+      </div>
+      <div class="sheet-label">Package</div>
+      <div class="pkg-row" id="sfPkgs"></div>
+      <div class="sheet-cols">
+        <div>
+          <div class="sheet-label">Standard items</div>
+          <div class="items-grid" id="sfItems"></div>
+        </div>
+        <div>
+          <div class="sheet-label">Your own items</div>
+          <div class="custom-add"><input id="sfCustom" placeholder="e.g. Tappet cover gaskets both banks"><button type="button" class="btn" id="sfCustomAdd">Add</button></div>
+          <div class="chips" id="sfChips"></div>
+          <div class="sheet-label" style="margin-top:10px">Notes</div>
+          <textarea id="sfNotes" rows="3" placeholder="Oil brand & litres, part numbers, anything worth remembering"></textarea>
+        </div>
+      </div>
+      <div class="sheet-foot"><span id="sfHint"></span><span class="foot-btns"><button type="button" class="btn destructive" id="sfDelete" hidden>Delete</button><button type="submit" class="btn primary" id="sfSave">Save to log</button></span></div>
+    </form>
+  </div>
+
   <div class="intro" id="intro" title="Tap to skip">
-    <svg class="logo" id="introLogo" viewBox="0 0 108 108">
-      <path d="M37.03,70.97 A24,24 0 1,1 70.97,70.97" stroke="var(--text)" stroke-opacity=".2" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      <path d="M77.93,55.88 A24,24 0 0,1 70.97,70.97" stroke="var(--alert)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      <path d="M37.03,70.97 A24,24 0 1,1 74.66,41.79" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" fill="none"/>
-      <path d="M49.70,56.55 L71.22,43.82" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="54" cy="54" r="5.5" fill="var(--surface-high)"/><circle cx="54" cy="54" r="2.5" fill="var(--teal)"/>
-    </svg>
-    <div class="word" id="introWord">INGWE</div>
+    <div class="eye-wrap" id="introLogo"><canvas id="cv-eye"></canvas></div>
+    <div class="word" id="introWord">ARGUS</div>
+    <div class="word-sub" id="introSub">Welcome back</div>
   </div>
 </div>
 <div class="caption">
   <svg viewBox="0 0 108 108" aria-label="App icon">
     <rect width="108" height="108" fill="#0B0B0C"/>
-    <g transform="translate(54 54) scale(1.35) translate(-54 -54)">
-      <path d="M37.03,70.97 A24,24 0 1,1 70.97,70.97" stroke="#EDEDEF" stroke-opacity=".2" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      <path d="M77.93,55.88 A24,24 0 0,1 70.97,70.97" stroke="#FF5A4F" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-      <path d="M37.03,70.97 A24,24 0 1,1 74.66,41.79" stroke="#FFA43A" stroke-width="6" stroke-linecap="round" fill="none"/>
-      <path d="M49.70,56.55 L71.22,43.82" stroke="#EDEDEF" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="54" cy="54" r="5.5" fill="#1C1C1F"/><circle cx="54" cy="54" r="2.5" fill="#3CCFB8"/>
+    <g transform="translate(54 54) scale(1.45) translate(-54 -54)">
+      <circle cx="54" cy="54" r="12" fill="#FFA43A" fill-opacity=".25"/>
+      <circle cx="54" cy="54" r="7.5" fill="none" stroke="#3CCFB8" stroke-width="1.2"/>
+      <circle cx="54" cy="54" r="12" fill="none" stroke="#FFA43A" stroke-width="3"/>
+      <path d="M54,45 C56.2,48 56.2,60 54,63 C51.8,60 51.8,48 54,45 Z" fill="#0B0B0C"/>
+      <circle cx="49" cy="48" r="1.8" fill="#EDEDEF"/>
+      <path d="M22,54 Q54,22 86,54 Q54,80 22,54 Z" fill="none" stroke="#EDEDEF" stroke-width="3" stroke-linejoin="round"/>
     </g>
   </svg>
   <span>Interactive preview of the Android cluster (1280×720 head unit). Use <b>Demo</b> to drive the simulated throttle — <b>Sweep</b> runs it continuously. Data is simulated.</span>
@@ -645,7 +867,28 @@ function sim(t) {
     gear: 'D' + (gi === -1 ? 8 : gi + 1), slip: t > 0.9, atf: 82 + t * 14,
     steer: t * 30 - 15, pitch: t * 18 - 4, wheelSlip: t * 8.5,
     ...simAir(t), ...simEngine(t),
+    ...(state.drive ? driveOut(t) : {}),
   };
+}
+
+// Sweep mode: a tiny vehicle model so speed builds up, the ZF 8HP picks gears and rpm drops on upshifts.
+const ZF = [4.71, 3.14, 2.11, 1.67, 1.29, 1.0, 0.84, 0.67], FINAL = 3.7, TYRE_M = 2.5;
+const wheelRpm = v => (v / TYRE_M) * 60;
+function driveStep(d, t, dt) {
+  const r = ZF[d.gear - 1];
+  const push = t * 6.4 * Math.sqrt(r / ZF[0]) * (1 - Math.min(1, d.v / 62));   // less shove in tall gears / high speed
+  const drag = 0.00035 * d.v * d.v + 0.15;
+  d.v = Math.max(0, Math.min(48, d.v + (push - drag - (d.brake ? 7.5 : 0)) * dt));
+  const rpm = wheelRpm(d.v) * r * FINAL;
+  const up = 1700 + t * 2600, down = 1050 + t * 1500;                         // spirited: hold gears with the pedal down
+  if (rpm > up && d.gear < 8 && nowS() - d.shiftAt > 0.45) { d.gear++; d.shiftAt = nowS(); }
+  else if (rpm < down && d.gear > 1 && nowS() - d.shiftAt > 0.3) { d.gear--; d.shiftAt = nowS(); }
+}
+const nowS = () => performance.now() / 1000;
+function driveOut(t) {
+  const d = state.drive, raw = wheelRpm(d.v) * ZF[d.gear - 1] * FINAL;
+  const conv = d.gear <= 2 ? 800 + t * 1400 : 0;                               // torque converter slip pulling away
+  return { speed: d.v * 3.6, rpm: Math.max(760, raw, conv), gear: 'D' + d.gear };
 }
 
 // Air: ambient, altitude (from the barometer), airflow along the intake path
@@ -1303,6 +1546,237 @@ function drawGlow(car) {
   txt(ctx, car.glowPhase === 'off' ? 'Plugs off' : `${car.glowPhase === 'pre' ? 'Pre-glow' : 'After-glow'} · ${Math.ceil(car.glowLeft)} s left`, 4, h - 1, { size: 11, color: C.text2 });
 }
 
+/* ── Service (mirrors ServicePage in the app) ───────────────────────────────
+ * Intervals summarised from public sources; "?" = not confirmed for the SA 2018 V6
+ * (check the service booklet). Remaining = whichever of km / time runs out first.
+ * Storage in the app: one small JSON file (see docs/HOW_IT_WORKS.md).
+ */
+const SCHEDULE = [
+  { id: 'oil',      name: 'Oil service',         km: 15000, months: 12,   conf: 'ok' },
+  { id: 'fuel',     name: 'Diesel filter',       km: 30000, months: null, conf: 'chk' },
+  { id: 'air',      name: 'Air filter',          km: 45000, months: null, conf: 'chk' },
+  { id: 'atf',      name: 'ZF 8-speed fluid',    km: 60000, months: null, conf: 'chk' },
+  { id: 'transfer', name: 'Transfer case fluid', km: 60000, months: null, conf: 'chk' },
+  { id: 'diffs',    name: 'Front & rear diffs',  km: 60000, months: null, conf: 'chk' },
+  { id: 'brake',    name: 'Brake fluid',         km: null,  months: 24,   conf: 'ok' },
+];
+// Standard items you can tick; "sched" links an item to a schedule row.
+const ITEMS = [
+  { id: 'oil', label: 'Engine oil', sched: 'oil' },          { id: 'oilfilter', label: 'Oil filter' },
+  { id: 'air', label: 'Air filter', sched: 'air' },          { id: 'fuel', label: 'Diesel filter', sched: 'fuel' },
+  { id: 'cabin', label: 'Cabin filter' },                    { id: 'brake', label: 'Brake fluid', sched: 'brake' },
+  { id: 'atf', label: 'ZF gearbox fluid & filter', sched: 'atf' }, { id: 'transfer', label: 'Transfer case fluid', sched: 'transfer' },
+  { id: 'fdiff', label: 'Front diff oil', sched: 'diffs' },  { id: 'rdiff', label: 'Rear diff oil', sched: 'diffs' },
+  { id: 'coolant', label: 'Coolant' },                       { id: 'pads', label: 'Brake pads / discs' },
+  { id: 'tyres', label: 'Tyres / rotation' },                { id: 'wipers', label: 'Wiper blades' },
+];
+const itemLabel = id => (ITEMS.find(i => i.id === id) || {}).label || id;
+const schedOf = id => (ITEMS.find(i => i.id === id) || {}).sched;
+const PACKAGES = {
+  'Minor service': ['oil', 'oilfilter'],
+  'Major service': ['oil', 'oilfilter', 'air', 'fuel', 'cabin', 'brake'],
+  'Gearbox': ['atf'],
+  '4×4 drivetrain': ['transfer', 'fdiff', 'rdiff'],
+  'Brakes': ['brake', 'pads'],
+  'Custom': [],
+};
+// Your history (no dates yet — tap an entry to add them)
+const DEFAULT_LOG = [
+  { id: 1, date: null, km: 134000, title: 'Major service', items: ['oil', 'oilfilter', 'air', 'atf', 'transfer'],
+    custom: ['Tappet cover gaskets, both banks'], shop: '', notes: '' },
+  { id: 2, date: null, km: 120000, title: 'Minor service', items: ['oil', 'oilfilter', 'fuel'],
+    custom: [], shop: '', notes: 'Filters incl. diesel filter' },
+];
+let svcLog = (() => { try { return JSON.parse(localStorage.getItem('ingwe-log-v4')) || DEFAULT_LOG; } catch (e) { return DEFAULT_LOG; } })();
+const saveLog = () => { try { localStorage.setItem('ingwe-log-v4', JSON.stringify(svcLog)); } catch (e) {} };
+const TODAY = new Date();
+const monthsBetween = (a, b) => (b - a) / (1000 * 60 * 60 * 24 * 30.44);
+const fmtKm = n => Math.round(n).toLocaleString('en-US');
+const $ = id => document.getElementById(id);
+
+// Odometer: from the car when the ECU reports it (OBD-II PID A6 / VW cluster), else your correction
+const odoState = { km: 134000, source: 'car' };
+const odo = () => odoState.km;
+
+function scheduleStatus() {
+  return SCHEDULE.map(item => {
+    const last = svcLog.filter(e => (e.items || []).some(id => schedOf(id) === item.id))
+      .sort((a, b) => b.km - a.km || (b.date || '').localeCompare(a.date || ''))[0];
+    if (!last) return { ...item, last: null, status: 'none' };
+    const lastDate = last.date ? new Date(last.date) : null;
+    const kmLeft = item.km ? last.km + item.km - odo() : null;
+    const monthsLeft = item.months && lastDate ? item.months - monthsBetween(lastDate, TODAY) : null;
+    const fracKm = kmLeft != null ? 1 - kmLeft / item.km : 0;
+    const fracT = monthsLeft != null ? 1 - monthsLeft / item.months : 0;
+    const used = Math.max(fracKm, fracT);
+    return { ...item, last, kmLeft, monthsLeft, used, status: used >= 1 ? 'over' : used >= 0.85 ? 'soon' : 'ok' };
+  });
+}
+const statusColor = s => s === 'over' ? C.alert : s === 'soon' ? C.caution : s === 'none' ? C.text3 : C.teal;
+const statusVar = s => s === 'over' ? 'var(--alert)' : s === 'soon' ? 'var(--caution)' : s === 'none' ? 'var(--text-3)' : 'var(--teal)';
+
+// Hero: the next oil service — the one number you check most
+function renderHero(st) {
+  const s = st.find(x => x.id === 'oil');
+  const over = s.kmLeft != null && s.kmLeft < 0;
+  const pct = Math.max(0, Math.min(1, s.used || 0)) * 100;
+  const months = s.months ? (s.monthsLeft != null ? ` · or in ${Math.max(0, Math.round(s.monthsLeft))} months` : ' · or 12 months, add the date') : '';
+  $('svcHero').innerHTML = s.kmLeft == null
+    ? `<div><div class="k"><span>Next oil service</span></div><div class="v num">–</div></div><div class="s">Log your last oil change to start the countdown</div>`
+    : `<div><div class="k"><span>Next oil service</span></div>
+         <div><span class="v num" style="${over ? 'color:var(--alert)' : ''}">${fmtKm(Math.abs(s.kmLeft))}</span><span class="u">${over ? 'km overdue' : 'km to go'}</span></div></div>
+       <div><div class="k"><span>Due at ${fmtKm(s.last.km + s.km)} km${months}</span><span style="color:${statusVar(s.status)}">${over ? 'Overdue' : s.status === 'soon' ? 'Due soon' : 'On track'}</span></div>
+         <div class="bar"><i style="width:${pct}%;background:${statusVar(s.status)}"></i></div>
+         <div class="s">Last done at ${fmtKm(s.last.km)} km · 5W-30 / 5W-40 to VW 505 01, 8.0 L with filter</div></div>`;
+}
+
+// Timeline: every job on one odometer axis. Bar = last done → due, filled up to today.
+function renderTimeline(st) {
+  const now = odo(), from = now - 20000, to = now + 50000;
+  const pos = km => Math.max(0, Math.min(100, ((km - from) / (to - from)) * 100));
+  const rows = st.map(s => {
+    const c = statusVar(s.status), q = s.conf === 'chk' ? '<small title="Interval not confirmed for SA — check the service booklet">?</small>' : '';
+    let track, left;
+    if (s.status === 'none') { track = '<span class="tl-msg">No record yet — log it when done</span>'; left = '<span style="color:var(--text-3)">–</span>'; }
+    else if (s.kmLeft == null) {
+      track = `<span class="tl-msg">${s.monthsLeft != null ? 'Time-based' : 'Time-based · add the date to your log entry'}</span>`;
+      left = s.monthsLeft != null ? `${Math.max(0, Math.round(s.monthsLeft))}<small>months</small>` : '<span style="color:var(--text-3)">every 2 yrs</span>';
+    } else {
+      const due = s.last.km + s.km, a = pos(s.last.km), b = pos(due), fill = b > a ? ((pos(now) - a) / (b - a)) * 100 : 100;
+      track = `<span class="tl-span" style="left:${a}%;width:${b - a}%"><i style="width:${Math.min(100, fill)}%"></i></span>${due <= to ? `<span class="tl-due" style="left:${b}%"></span>` : ''}`;
+      left = s.kmLeft < 0 ? `${fmtKm(-s.kmLeft)}<small>km over</small>` : `${fmtKm(s.kmLeft)}<small>km</small>`;
+    }
+    return `<div class="tl-name">${s.name}${q}</div><div class="tl-track" style="--c:${c}">${track}</div><div class="tl-left" style="--c:${c}">${left}</div>`;
+  }).join('');
+  let ticks = '';
+  for (let k = Math.ceil(from / 10000) * 10000; k <= to; k += 10000) ticks += `<span style="left:${pos(k)}%">${k / 1000}k</span>`;
+  $('tl').innerHTML = rows + `<div class="tl-axis">${ticks}</div>`
+    + `<div class="tl-now" style="left:calc(150px + (100% - 278px) * ${pos(now) / 100})"><b>NOW</b></div>`;
+}
+
+// Specs & fluids — from HaynesPro data for the Amarok 3.0 TDI (DDXA) 2017–2019, summarised.
+const SPECS = [
+  { t: 'Engine oil', rows: [['Spec', '<span class="hl">VW 505 01</span>'], ['Grade', '5W-30 or 5W-40'], ['Also fine', 'VW 507 00 oils'], ['Capacity', '8.0 L incl. filter'], ['Drain plug', '30 Nm'], ['Oil filter cap', '35 Nm']],
+    note: '507 00 oils also meet 505 01. Motul 8100 X-clean 5W-40 or any VW-approved 505 01 oil fits.' },
+  { t: 'Coolant', rows: [['Up to 25 Nov 2019', 'G13 · TL-VW 774 J'], ['From 26 Nov 2019', 'G12evo · TL-VW 774 L'], ['System', '8.0 L'], ['Mix 40 %', 'to −25 °C'], ['Mix 50 %', 'to −35 °C'], ['Cap opens', '1.4–1.6 bar']],
+    note: 'Use deionised water. Don\'t mix coolant types.' },
+  { t: 'Gearbox & 4Motion', rows: [['Transfer case', 'ATF G 052 533 A2 · 1.25 L'], ['Transfer plugs', '27 Nm, replace'], ['Front diff', '75W-90 G 052 145 · 0.8 L'], ['Front fill plug', '35 Nm'], ['Rear diff', 'G 052 539 A2 · 2.0 L'], ['Rear plugs', '33 Nm, replace']],
+    note: 'ZF 8HP fluid isn\'t listed on these sheets. Use the ZF Lifeguard 8 spec from the workshop.' },
+  { t: 'Brakes', rows: [['Fluid', 'VW 501 14 (DOT 4 ok)'], ['Capacity', '≈1.0 L'], ['Front disc', '303×28 → min 26 mm'], ['  or', '332×30 → min 27 mm'], ['Rear disc', '300×22 → min 19 mm'], ['Pads', 'min 2 mm']],
+    note: 'Brake fluid every 2 years regardless of distance.' },
+  { t: 'Wheels & tyres', rows: [['Front', '2.0–2.2 bar'], ['Rear', '2.0–3.0 bar (by load)'], ['Spare', '4.5 bar'], ['Bolt pattern', '5 × 120'], ['Wheel bolts', '180 Nm'], ['TPMS', 'direct sensors']],
+    note: 'Tighten wheel bolts by hand with a torque wrench. No impact gun, no grease on the threads.' },
+  { t: 'Other fluids & checks', rows: [['Power steering', 'G 004 000 M2'], ['A/C gas', 'R134a · 575–625 g'], ['A/C oil', 'ISO 100 · 130–150 ml'], ['Glow plugs', '12 Nm'], ['Compression', '28–33 bar (min 21)'], ['Oil pressure', '>1.2 bar idle · >3.4 at 2500']],
+    note: 'Timing chain (no belt to replace). Hydraulic valve lifters, no clearance to set.' },
+];
+function renderSpecs() {
+  $('svcSpecs').innerHTML = SPECS.map(s => `<div class="spec-card"><h4><span>${s.t}</span>${s.tag ? `<span class="hl" style="font-size:12px">${s.tag}</span>` : ''}</h4>
+    <dl>${s.rows.map(([k, v]) => `<dt>${k}</dt><dd class="num">${v}</dd>`).join('')}</dl>${s.note ? `<div class="note">${s.note}</div>` : ''}</div>`).join('');
+}
+$('svcTabs').addEventListener('click', e => {
+  const v = e.target.dataset.svc; if (!v) return;
+  $('svcTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.svc === v)));
+  $('svcOverview').hidden = v !== 'overview'; $('svcSpecs').hidden = v !== 'specs';
+  if (v === 'specs' && !$('svcSpecs').childElementCount) renderSpecs();
+});
+function renderLog() {
+  const rows = svcLog.slice().sort((a, b) => b.km - a.km || (b.date || '').localeCompare(a.date || ''));
+  $('logList').innerHTML = rows.length ? rows.map(e => {
+    const d = e.date ? new Date(e.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : 'add date';
+    const what = [...(e.items || []).map(itemLabel), ...(e.custom || [])].join(' · ');
+    return `<div class="log-row" data-id="${e.id}" role="button" tabindex="0">
+      <div><div class="km num">${fmtKm(e.km)} km</div><div class="d">${d}</div></div>
+      <div><div class="t">${e.title}${e.shop ? ` <span style="color:var(--text-3);font-size:13px">· ${e.shop}</span>` : ''}</div><div class="items">${what}${e.notes ? ' — ' + e.notes : ''}</div></div>
+      <div class="edit">Edit ›</div>
+    </div>`;
+  }).join('') : '<div class="log-empty">No services logged yet. Tap “Log a service” after each visit.</div>';
+}
+
+function renderOdo() {
+  $('odoBig').textContent = `${fmtKm(odo())} km`;
+  $('odoSrc').textContent = odoState.source === 'car' ? 'From car · OBD-II' : 'Corrected by you';
+}
+
+function renderService() {
+  const st = scheduleStatus();
+  renderOdo(); renderHero(st); renderTimeline(st); renderLog();
+}
+
+/* ── Log / edit sheet ────────────────────────────────────────────────────── */
+const sheet = { editing: null, pkg: 'Minor service', items: new Set(), custom: [], confirmDelete: false };
+function renderSheet() {
+  $('sheetTitle').textContent = sheet.editing ? 'Edit service' : 'Log a service';
+  $('sfSave').textContent = sheet.editing ? 'Save changes' : 'Save to log';
+  $('sfDelete').hidden = !sheet.editing;
+  $('sfDelete').textContent = sheet.confirmDelete ? 'Tap again to delete' : 'Delete';
+  $('sfDelete').classList.toggle('confirm', sheet.confirmDelete);
+  $('sfPkgs').innerHTML = Object.keys(PACKAGES).map(p =>
+    `<button type="button" class="pkg" data-pkg="${p}" aria-pressed="${p === sheet.pkg}">${p}</button>`).join('');
+  $('sfItems').innerHTML = ITEMS.map(i =>
+    `<label><input type="checkbox" data-item="${i.id}" ${sheet.items.has(i.id) ? 'checked' : ''}>${i.label}</label>`).join('');
+  $('sfChips').innerHTML = sheet.custom.map((t, k) =>
+    `<span class="chip">${t}<button type="button" data-rm="${k}" aria-label="Remove">✕</button></span>`).join('')
+    || '<span style="color:var(--text-3);font-size:12px">Repairs, upgrades, one-offs — anything not in the list.</span>';
+  const n = sheet.items.size + sheet.custom.length;
+  $('sfHint').style.color = '';
+  $('sfHint').textContent = n ? `${n} item${n === 1 ? '' : 's'} · ticked items update the timeline` : 'Pick a package, tick items or add your own';
+}
+function openSheet(entry) {
+  sheet.editing = entry ? entry.id : null; sheet.confirmDelete = false;
+  sheet.pkg = entry ? (PACKAGES[entry.title] ? entry.title : 'Custom') : 'Minor service';
+  sheet.items = new Set(entry ? entry.items : PACKAGES['Minor service']);
+  sheet.custom = entry ? [...entry.custom] : [];
+  $('sfDate').value = entry ? (entry.date || '') : TODAY.toISOString().slice(0, 10);
+  $('sfKm').value = entry ? entry.km : odo();
+  $('sfShop').value = entry ? entry.shop : ''; $('sfNotes').value = entry ? entry.notes : ''; $('sfCustom').value = '';
+  renderSheet(); $('logSheet').hidden = false;
+}
+const closeSheet = () => { $('logSheet').hidden = true; };
+$('logAdd').addEventListener('click', () => openSheet(null));
+$('logList').addEventListener('click', e => {
+  const row = e.target.closest('.log-row'); if (!row) return;
+  openSheet(svcLog.find(x => x.id === Number(row.dataset.id)));
+});
+$('sheetClose').addEventListener('click', closeSheet);
+$('logSheet').addEventListener('click', e => { if (e.target.id === 'logSheet') closeSheet(); }); // tap outside
+$('sfPkgs').addEventListener('click', e => {
+  const p = e.target.dataset.pkg; if (!p) return;
+  sheet.pkg = p; sheet.items = new Set(PACKAGES[p]); renderSheet();
+});
+$('sfItems').addEventListener('change', e => {
+  const id = e.target.dataset.item; if (!id) return;
+  e.target.checked ? sheet.items.add(id) : sheet.items.delete(id); renderSheet();
+});
+const addCustom = () => { const t = $('sfCustom').value.trim(); if (t) { sheet.custom.push(t); $('sfCustom').value = ''; renderSheet(); } };
+$('sfCustomAdd').addEventListener('click', addCustom);
+$('sfCustom').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+$('sfChips').addEventListener('click', e => { const k = e.target.dataset.rm; if (k != null) { sheet.custom.splice(Number(k), 1); renderSheet(); } });
+$('sfDelete').addEventListener('click', () => {
+  if (!sheet.confirmDelete) { sheet.confirmDelete = true; renderSheet(); return; }   // two taps, no pop-up
+  svcLog = svcLog.filter(x => x.id !== sheet.editing); saveLog(); closeSheet(); renderService();
+});
+$('sheetForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const km = Number($('sfKm').value);
+  if (!km || (sheet.items.size + sheet.custom.length) === 0) {
+    $('sfHint').textContent = 'Add the odometer and at least one item'; $('sfHint').style.color = C.alert; return;
+  }
+  const entry = {
+    id: sheet.editing ?? Date.now(), date: $('sfDate').value || null, km,
+    title: sheet.pkg === 'Custom' ? (sheet.custom[0] || 'Custom work') : sheet.pkg,
+    items: [...sheet.items], custom: [...sheet.custom], shop: $('sfShop').value.trim(), notes: $('sfNotes').value.trim(),
+  };
+  svcLog = sheet.editing ? svcLog.map(x => x.id === sheet.editing ? entry : x) : [...svcLog, entry];
+  saveLog(); closeSheet(); renderService();
+});
+// Odometer correction (when the car can't report it, or it's off)
+$('odoFix').addEventListener('click', () => { $('odo').value = odo(); $('odoEdit').hidden = false; $('odoFix').hidden = true; });
+$('odoSave').addEventListener('click', () => {
+  const v = Number($('odo').value); if (v > 0) { odoState.km = v; odoState.source = 'manual'; }
+  $('odoEdit').hidden = true; $('odoFix').hidden = false; renderService();
+});
+$('manualOpen').addEventListener('click', () => { $('manualAct').textContent = 'In the app: picks your PDF once, then opens it'; });
+
 /* ── Common rail: big number, one bar, target tick ──────────────────────── */
 function drawRail(car) {
   const { ctx, w, h } = prep(document.getElementById('cv-rail'));
@@ -1583,9 +2057,9 @@ function render() {
 function renderFaults() {
   const n = faults.length;
   const link = document.getElementById('faultsLink');
-  link.innerHTML = n ? `Faults&nbsp;&nbsp;${n}` : 'Faults';
+  link.innerHTML = n ? `Faults <span class="badge">${n}</span>` : 'Faults';
   link.classList.toggle('alert', n > 0);
-  document.getElementById('notice').hidden = n === 0 || state.view === 'faults';
+  document.getElementById('notice').hidden = true; // banner retired: the Faults button pulses instead
   document.getElementById('noticeText').textContent = `${n} fault code${n === 1 ? '' : 's'} stored`;
   document.getElementById('noticeCodes').innerHTML = faults.map(f => f.code).join('&nbsp;&nbsp;');
   const mil = document.getElementById('milText');
@@ -1619,7 +2093,7 @@ function renderFaults() {
     </div>`).join('');
 }
 
-const PAGES = ['cluster', 'economy', 'driveline', 'offroad', 'air', 'engine']; // most-used first
+const PAGES = ['cluster', 'economy', 'driveline', 'offroad', 'air', 'engine', 'service']; // most-used first
 function setView(view) {
   const from = PAGES.indexOf(state.view), to = PAGES.indexOf(view);
   state.view = view;
@@ -1632,9 +2106,18 @@ function setView(view) {
       s.classList.add(to > from ? 'enter-from-right' : 'enter-from-left');
     }
   });
+  document.querySelector('footer').hidden = view === 'service' || view === 'faults'; // trip stats only where they mean something
   renderFaults();
+  if (view === 'service') renderService(); // only on open / edit, not every frame
   render();
+  moveTabPill();
 }
+function moveTabPill() {
+  const t = document.querySelector('.tab[aria-selected="true"]'), p = $('tabPill'); if (!t || !p) return;
+  p.style.width = t.offsetWidth + 'px'; p.style.transform = `translateX(${t.offsetLeft}px)`;
+}
+window.addEventListener('resize', moveTabPill);
+requestAnimationFrame(moveTabPill);
 
 // Swipe left / right on the body to move between the three cluster pages (mirrors HorizontalPager)
 (function swipe() {
@@ -1712,35 +2195,150 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
 const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;        // ≈ FastOutSlowIn
 const easeOut = t => 1 - Math.pow(1 - t, 3);                                       // ≈ LinearOutSlowIn
 const clamp01 = t => Math.max(0, Math.min(1, t));
+// Wordmark for the intro — one place to change once the name is picked (?name=HEIMDALL to try others)
+const APP_NAME = (new URLSearchParams(location.search).get('name') || 'ARGUS').toUpperCase();
+
+/* The eye (≈4 s, tap to skip):
+ *   slit draws out → lids open (upper leads, like a real eye) → gauge-ring iris spins down →
+ *   glances left / right → locks on you: pupil narrows, the core flares →
+ *   name resolves letter by letter → blink → the slit collapses to a point → needle sweep.
+ */
+const FIBRES = Array.from({ length: 96 }, (_, i) => ({ a: (i / 96) * Math.PI * 2 + Math.sin(i * 12.9898) * 0.03, l: 0.55 + ((Math.sin(i * 78.233) + 1) / 2) * 0.4 }));
+const backOut = t => { const s = 1.4; return 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2); };
+function drawEye(t, look) {
+  const { ctx, w, h } = prep(document.getElementById('cv-eye'), 440, 240); // fixed size: never measured while hidden
+  const cx = w / 2, cy = h / 2, W = 150;
+  const slit = easeOut(clamp01(t / 280)) * (1 - ease(clamp01((t - 2420) / 200)));      // draws out, then collapses to a point
+  const opening = backOut(clamp01((t - 260) / 620));
+  const blink = ease(clamp01((t - 2200) / 220));
+  const up = 64 * opening * (1 - blink), low = 54 * clamp01((t - 300) / 600) * (1 - blink); // upper lid leads, lower lags
+  const lock = easeOut(clamp01((t - 1700) / 260));
+  const flare = Math.sin(Math.PI * clamp01((t - 1820) / 420));
+  const open = up / 64;
+  const light = document.documentElement.dataset.theme === 'light';
+
+  // ambient glow behind the eye, brightest at the lock-on flare
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, h / 2 - 2); // stays inside the canvas: no visible edge
+  glow.addColorStop(0, withAlpha(C.accent, 0.10 * open + 0.12 * flare)); glow.addColorStop(1, withAlpha(C.accent, 0));
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+
+  // sonar rings
+  for (let k = 0; k < 3; k++) {
+    const p = clamp01((t - 950 - k * 240) / 950);
+    if (p > 0 && p < 1) {
+      ctx.strokeStyle = withAlpha(C.teal, 0.3 * (1 - p)); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.ellipse(cx, cy, W * (0.8 + p * 0.85), (up + 10) * (0.9 + p * 1.1), 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  const lidPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx - W * slit, cy);
+    ctx.quadraticCurveTo(cx, cy - 2 * up, cx + W * slit, cy);
+    ctx.quadraticCurveTo(cx, cy + 2 * low * 0.85, cx - W * slit, cy);
+    ctx.closePath();
+  };
+  if (open > 0.02 && slit > 0.05) {
+    ctx.save(); lidPath(); ctx.clip();
+    const R = 54, ix = cx + look * 46, iy = cy + Math.abs(look) * 4;
+    // iris core: warm fire, flaring on lock
+    const g = ctx.createRadialGradient(ix, iy, 3, ix, iy, R);
+    g.addColorStop(0, withAlpha(C.accent, 1)); g.addColorStop(0.4 + flare * 0.15, withAlpha(C.accent, (light ? 0.6 : 0.38) + flare * 0.3)); g.addColorStop(1, withAlpha(C.accent, light ? 0.16 : 0.05));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ix, iy, R, 0, Math.PI * 2); ctx.fill();
+    // fibres for depth
+    const spin = (1 - easeOut(clamp01((t - 260) / 1450))) * Math.PI * 3;
+    ctx.lineWidth = 1;
+    for (const f of FIBRES) {
+      const a = f.a + spin * 0.35, r0 = 12, r1 = (R - 14) * f.l;
+      ctx.strokeStyle = withAlpha(light ? '#5A2E00' : C.text, light ? 0.16 : 0.10);
+      ctx.beginPath(); ctx.moveTo(ix + Math.cos(a) * r0, iy + Math.sin(a) * r0); ctx.lineTo(ix + Math.cos(a) * r1, iy + Math.sin(a) * r1); ctx.stroke();
+    }
+    // gauge-ring ticks, flashing bright the moment it locks
+    const tickFlash = Math.max(0, 1 - Math.abs(t - 1800) / 160);
+    for (let i = 0; i < 60; i++) {
+      const a = (i / 60) * Math.PI * 2 + spin, major = i % 5 === 0;
+      const r0 = R - (major ? 10 : 6), r1 = R - 2;
+      ctx.strokeStyle = withAlpha(tickFlash > 0 && major ? C.text : C.teal, major ? 0.95 : 0.4 + tickFlash * 0.4); ctx.lineWidth = major ? 2 : 1;
+      ctx.beginPath(); ctx.moveTo(ix + Math.cos(a) * r0, iy + Math.sin(a) * r0); ctx.lineTo(ix + Math.cos(a) * r1, iy + Math.sin(a) * r1); ctx.stroke();
+    }
+    ctx.strokeStyle = withAlpha(C.teal, 0.5); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(ix, iy, R - 14, 0, Math.PI * 2); ctx.stroke();
+    // pupil slit narrows as it focuses
+    const pw = 14 - 8 * easeOut(clamp01((t - 1550) / 300)) + Math.abs(look) * 4;
+    ctx.fillStyle = light ? '#141416' : css('--bg'); ctx.beginPath(); ctx.ellipse(ix, iy, pw, R * 0.78, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = withAlpha(C.accent, 0.9); ctx.lineWidth = 1.5; ctx.stroke();
+    // a light scan line passes over the iris while it searches
+    const sp = clamp01((t - 1000) / 700);
+    if (sp > 0 && sp < 1) {
+      const sy = cy - up + sp * (up + low) * 2;
+      const sg = ctx.createLinearGradient(0, sy - 6, 0, sy + 6);
+      sg.addColorStop(0, withAlpha(C.teal, 0)); sg.addColorStop(0.5, withAlpha(C.teal, 0.35)); sg.addColorStop(1, withAlpha(C.teal, 0));
+      ctx.fillStyle = sg; ctx.fillRect(cx - W, sy - 6, W * 2, 12);
+    }
+    // glint, and the upper lid's soft shadow on the eye
+    ctx.fillStyle = withAlpha('#ffffff', 0.8); ctx.beginPath(); ctx.arc(ix - 18, iy - 20, 3.2, 0, Math.PI * 2); ctx.fill();
+    const sh = ctx.createLinearGradient(0, cy - up, 0, cy - up + 26);
+    sh.addColorStop(0, withAlpha('#000000', light ? 0.14 : 0.45)); sh.addColorStop(1, withAlpha('#000000', 0));
+    ctx.fillStyle = sh; ctx.fillRect(cx - W, cy - up - 2, W * 2, 30);
+    ctx.restore();
+  }
+  // lid outline, fading out at the corners
+  const lg = ctx.createLinearGradient(cx - W, 0, cx + W, 0);
+  lg.addColorStop(0, withAlpha(C.text, 0)); lg.addColorStop(0.18, withAlpha(C.text, 0.9)); lg.addColorStop(0.82, withAlpha(C.text, 0.9)); lg.addColorStop(1, withAlpha(C.text, 0));
+  if (slit > 0.05) { lidPath(); ctx.strokeStyle = lg; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke(); }
+  // crease above the upper lid
+  if (open > 0.3) {
+    ctx.strokeStyle = withAlpha(C.text, 0.18 * open); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - W * 0.7, cy - up * 0.55); ctx.quadraticCurveTo(cx, cy - 2 * up - 14, cx + W * 0.7, cy - up * 0.55); ctx.stroke();
+  }
+  // the collapse: a bright point that pops and fades
+  const dot = clamp01((t - 2520) / 120) * (1 - clamp01((t - 2640) / 260));
+  if (dot > 0) {
+    const dg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 18 + dot * 10);
+    dg.addColorStop(0, withAlpha(C.accent, dot)); dg.addColorStop(1, withAlpha(C.accent, 0));
+    ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
 let introRun = 0;
 function playIntro() {
   const run = ++introRun;
-  const intro = document.getElementById('intro'), logo = document.getElementById('introLogo'), word = document.getElementById('introWord');
-  intro.hidden = false;
+  const intro = document.getElementById('intro'), logo = document.getElementById('introLogo');
+  const word = document.getElementById('introWord'), sub = document.getElementById('introSub');
+  word.innerHTML = [...APP_NAME].map(ch => `<span>${ch}</span>`).join('');
+  const letters = [...word.children];
+  sub.textContent = 'Welcome back';
+  intro.hidden = false; intro.style.opacity = 1;
   document.body.classList.add('sweeping');
   const t0 = performance.now();
   let skipped = false;
   intro.onclick = () => { skipped = true; };
   (function frame(now) {
     if (run !== introRun) return;
-    const t = now - t0;
-    // wordmark: in 150–500 ms, out 850–1150 ms
-    const w = t < 500 ? clamp01((t - 150) / 350) : 1 - clamp01((t - 850) / 300);
-    // overlay: fade 800–1350 ms while the logo grows
-    const o = skipped ? 0 : 1 - ease(clamp01((t - 800) / 550));
-    // sweep: up 900–1550, hold 80, down 1630–2430
-    state.sweep = t < 900 ? 0 : t < 1550 ? ease((t - 900) / 650) : t < 1630 ? 1 : 1 - easeOut(clamp01((t - 1630) / 800));
-    word.style.opacity = skipped ? 0 : w;
-    word.style.transform = `translateY(${76 + (1 - w) * 8}px)`;
+    const t = skipped ? Math.max(now - t0, 2420) : now - t0;
+    const look = t < 1000 ? 0 : t < 1230 ? -ease((t - 1000) / 230) : t < 1560 ? -1 + 2 * ease((t - 1230) / 330) : 1 - ease(clamp01((t - 1560) / 260));
+    if (t < 2950) drawEye(t, look);
+    // name resolves letter by letter: blur → sharp, rising into place
+    const out = 1 - ease(clamp01((t - 2250) / 300));
+    word.style.opacity = out;
+    letters.forEach((el, i) => {
+      const p = easeOut(clamp01((t - 1150 - i * 70) / 380));
+      el.style.opacity = p; el.style.filter = `blur(${(1 - p) * 8}px)`; el.style.transform = `translateY(${(1 - p) * 10}px)`;
+    });
+    const sp = clamp01((t - 1650) / 400);
+    sub.style.opacity = easeOut(sp) * out;
+    sub.style.transform = `translateY(${150 + (1 - easeOut(sp)) * 6}px)`;
+    const o = 1 - ease(clamp01((t - 2560) / 380));
     intro.style.opacity = o;
-    logo.style.transform = `scale(${1 + (1 - o) * 0.25})`;
+    logo.style.transform = 'translateY(-30px)';
     intro.hidden = o <= 0;
+    // needle sweep as the point fades: up 2600–3250, hold, down 3330–4130
+    state.sweep = t < 2600 ? 0 : t < 3250 ? ease((t - 2600) / 650) : t < 3330 ? 1 : 1 - easeOut(clamp01((t - 3330) / 800));
     render();
-    if (t < 2430) requestAnimationFrame(frame);
+    if (t < 4130) requestAnimationFrame(frame);
     else { state.sweep = 0; document.body.classList.remove('sweeping'); render(); }
   })(t0);
-}
-document.getElementById('replayIntro').addEventListener('click', playIntro);
+}document.getElementById('replayIntro').addEventListener('click', playIntro);
+
 document.getElementById('coldBtn').addEventListener('click', e => {
   state.coldAt = state.coldAt ? null : performance.now() / 1000;
   e.currentTarget.setAttribute('aria-pressed', String(!!state.coldAt));
@@ -1756,12 +2354,31 @@ document.getElementById('sweepBtn').addEventListener('click', e => {
   autoSweep = !autoSweep;
   e.currentTarget.setAttribute('aria-pressed', String(autoSweep));
   if (autoSweep) {
-    const t0 = performance.now(), from = state.throttle;
+    // A spirited back-road loop (~22 s): launch, short-shift lift, brake into a bend,
+    // hold part throttle through it, punch out, kickdown overtake, lift and coast.
+    // [seconds, throttle 0–1, ramp seconds] — ramps make pedal moves feel like a foot, not a switch.
+    const DRIVE = [
+      [0.0, 0.08, 0.3], [0.8, 1.00, 0.25], [3.6, 0.55, 0.15], [3.9, 1.00, 0.2],   // launch, lift-shift, back on
+      [6.2, 0.00, 0.2, 1], [7.6, 0.30, 0.5], [9.6, 0.92, 0.35],                    // brake, through the bend, punch out
+      [11.8, 0.45, 0.6], [13.0, 1.00, 0.15], [15.6, 0.62, 0.5],                    // ease off, kickdown overtake, settle
+      [16.8, 0.00, 0.3], [18.0, 0.70, 0.45], [19.4, 0.00, 0.3, 1],                 // lift, short burst, brake hard for the next bend
+    ];
+    const LOOP = 22.0;
+    const t0 = performance.now();
+    let held = state.throttle, startAt = 0, target = state.throttle, ramp = 0.3, idx = -1, last = t0;
+    state.drive = { v: 0, gear: 1, shiftAt: 0, brake: false };
     document.body.classList.add('sweeping');
     (function loop(now) {
-      if (!autoSweep) { document.body.classList.remove('sweeping'); return; }
-      const phase = ((now - t0) / 1600) % 2;
-      state.throttle = phase < 1 ? ease(phase) : 1 - ease(phase - 1);
+      if (!autoSweep) { document.body.classList.remove('sweeping'); state.drive = null; render(); return; }
+      const t = ((now - t0) / 1000) % LOOP;
+      let k = 0; for (let i = 0; i < DRIVE.length; i++) if (DRIVE[i][0] <= t) k = i;
+      if (k !== idx) { idx = k; held = state.throttle; target = DRIVE[k][1]; ramp = DRIVE[k][2]; startAt = t; }
+      const p = Math.min(1, (t - startAt) / ramp);
+      // Small foot tremor while on the pedal — real throttle traces are never flat
+      const tremor = target > 0.1 ? Math.sin(now / 90) * 0.012 + Math.sin(now / 37) * 0.008 : 0;
+      state.throttle = Math.max(0, Math.min(1, held + (target - held) * ease(p) + tremor));
+      state.drive.brake = !!DRIVE[k][3];
+      driveStep(state.drive, state.throttle, Math.min(0.05, (now - last) / 1000)); last = now;
       document.getElementById('throttle').value = Math.round(state.throttle * 100);
       render();
       requestAnimationFrame(loop);
@@ -1791,7 +2408,7 @@ document.getElementById('demoLink').addEventListener('click', () => {
 buildDials();
 document.getElementById('demo').hidden = true;
 const initial = new URLSearchParams(location.search).get('tab') || location.hash.slice(1);
-setView(['cluster', 'driveline', 'offroad', 'economy', 'air', 'engine', 'faults'].includes(initial) ? initial : 'cluster');
+setView(['cluster', 'driveline', 'offroad', 'economy', 'air', 'engine', 'service', 'faults'].includes(initial) ? initial : 'cluster');
 render();
 if (!new URLSearchParams(location.search).has('nointro')) playIntro(); else document.getElementById('intro').hidden = true;
 </script>

@@ -53,5 +53,7 @@
   { "id": "pitch_angle", "label": "Pitch", "ecu": "7E2", "service": "22", "pid": "0252",
     "formula": "A-45", "unit": "°", "min": -45, "max": 45, "fastHz": false, "verified": false },
   { "id": "roll_angle", "label": "Roll", "ecu": "7E2", "service": "22", "pid": "0253",
-    "formula": "A-45", "unit": "°", "min": -45, "max": 45, "fastHz": false, "verified": false }
+    "formula": "A-45", "unit": "°", "min": -45, "max": 45, "fastHz": false, "verified": false },
+  { "id": "odometer", "label": "Odometer", "ecu": "7E0", "service": "01", "pid": "A6",
+    "formula": "((A*16777216)+(B*65536)+(C*256)+D)/10", "unit": "km", "min": 0, "max": 999999, "fastHz": false, "verified": false }
 ]

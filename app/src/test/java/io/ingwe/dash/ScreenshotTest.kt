@@ -5,7 +5,9 @@ import androidx.compose.ui.test.onRoot
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import io.ingwe.dash.data.service.ServiceStore
 import io.ingwe.dash.data.transport.MockTransport
+import io.ingwe.dash.ui.components.IgnitionIntro
 import io.ingwe.dash.data.vehicle.VehicleRepository
 import io.ingwe.dash.ui.components.FitToDesignSize
 import io.ingwe.dash.ui.dashboard.DashboardScreen
@@ -28,16 +30,17 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
-abstract class ScreenshotBase(private val sizeName: String) {
+abstract class ScreenshotBase(protected val sizeName: String) {
     @get:Rule val compose = createComposeRule()
 
     protected fun shot(page: Int, name: String, light: Boolean = false) {
         IngweThemeState.isLight = light
         compose.mainClock.autoAdvance = false
         val repo = VehicleRepository(loadSignals = { emptyList() }, adapterTransport = { MockTransport() })
+        val store = ServiceStore(java.io.File.createTempFile("service", ".json").apply { deleteOnExit() })
         compose.setContent {
             IngweTheme {
-                FitToDesignSize { DashboardScreen(rememberNavController(), FaultStore(), repo, initialPage = page) }
+                FitToDesignSize { DashboardScreen(rememberNavController(), FaultStore(), repo, store, initialPage = page) }
             }
         }
         compose.mainClock.advanceTimeBy(1_500)
@@ -50,6 +53,16 @@ abstract class ScreenshotBase(private val sizeName: String) {
     @Test fun economy() = shot(1, "economy")
     @Test fun air() = shot(4, "air")
     @Test fun engine() = shot(5, "engine")
+    @Test fun service() = shot(6, "service")
+
+    /** The start-up eye, frozen at the lock-on moment with the name showing. */
+    @Test fun intro() {
+        IngweThemeState.isLight = false
+        compose.mainClock.autoAdvance = false
+        compose.setContent { IngweTheme { FitToDesignSize { IgnitionIntro { } } } }
+        compose.mainClock.advanceTimeBy(1_950)
+        compose.onRoot().captureRoboImage("build/screenshots/$sizeName/intro.png")
+    }
 }
 
 /** Design target: 1280×720 dp. Also captures light mode. */
@@ -58,6 +71,7 @@ class Screenshot1280x720 : ScreenshotBase("1280x720") {
     @Test fun clusterLight() = shot(0, "cluster", light = true)
     @Test fun economyLight() = shot(1, "economy", light = true)
     @Test fun engineLight() = shot(5, "engine", light = true)
+    @Test fun serviceLight() = shot(6, "service", light = true)
 }
 
 /** 1280×720 px panel at 1.5× density = 853×480 dp — a common head-unit setup. */

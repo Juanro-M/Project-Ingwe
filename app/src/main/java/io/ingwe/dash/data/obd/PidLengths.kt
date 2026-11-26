@@ -40,6 +40,7 @@ object PidLengths {
         0x71 to 6, // variable geometry turbo control
         0x77 to 5, // charge air cooler temperature
         0x78 to 9, // exhaust gas temperature bank 1
+        0xA6 to 4, // odometer (0.1 km) — newer ECUs only; parked if unsupported
     )
 
     fun of(pid: Int): Int? = LENGTHS[pid]

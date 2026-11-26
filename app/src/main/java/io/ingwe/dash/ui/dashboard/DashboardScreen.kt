@@ -24,6 +24,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.delay
 import io.ingwe.dash.data.vehicle.DataSource
 import io.ingwe.dash.data.vehicle.IgnitionState
 import io.ingwe.dash.data.vehicle.LockupState
@@ -37,17 +56,22 @@ import io.ingwe.dash.ui.pages.EconomyPage
 import io.ingwe.dash.ui.pages.EnginePage
 import io.ingwe.dash.ui.pages.GearboxRow
 import io.ingwe.dash.ui.pages.SourceTag
+import io.ingwe.dash.data.service.ServiceEntry
+import io.ingwe.dash.data.service.ServiceStore
+import io.ingwe.dash.ui.service.LogSheet
+import io.ingwe.dash.ui.service.ServicePage
 import io.ingwe.dash.ui.theme.*
 import kotlinx.coroutines.launch
 
-/** Pages in order of how often they're likely to be used (tabs and swipe follow this order). */
-private enum class ClusterView(val label: String) {
-    CLUSTER("Cluster"),     // everyday driving
-    ECONOMY("Economy"),     // fuel, range, trip — every drive
-    DRIVELINE("Driveline"), // gear, ATF, load — towing / long drives
-    OFFROAD("Off-road"),    // only when off the tar
-    AIR("Air"),             // altitude, outside air, airflow health
-    ENGINE("Engine"),       // glow plugs & injectors — diagnostics
+/** Pages in order of how often they're likely to be used (tabs and swipe follow this order). Icons are 24×24 SVG paths. */
+private enum class ClusterView(val label: String, val icon: String) {
+    CLUSTER("Cluster", "M4 16a8 8 0 1 1 16 0M12 16l4-5"),                                             // everyday driving
+    ECONOMY("Economy", "M5 19c0-8 6-13 14-13 0 8-5 13-13 13M5 19l7-7"),                                // fuel, range, trip
+    DRIVELINE("Driveline", "M15 12a3 3 0 1 1-6 0a3 3 0 1 1 6 0M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"), // gear, ATF, load
+    OFFROAD("Off-road", "M3 19l6-10 4 6 2-3 6 7z"),                                                     // off the tar
+    AIR("Air", "M3 9h11a3 3 0 1 0-3-3M3 14h15a3 3 0 1 1-3 3"),                                           // altitude, airflow
+    ENGINE("Engine", "M4 10h3l2-3h6v3h3v8h-3l-2 2H9l-2-3H4z"),                                            // glow plugs & injectors
+    SERVICE("Service", "M14.5 6.5a4 4 0 0 0-5 5L4 17l3 3 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z"), // maintenance log
 }
 
 /**
@@ -65,7 +89,7 @@ private enum class ClusterView(val label: String) {
  * adapter) is chosen in the demo bar.
  */
 @Composable
-fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: VehicleRepository, initialPage: Int = 0) {
+fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: VehicleRepository, serviceStore: ServiceStore, initialPage: Int = 0) {
     var boostUnit by rememberSaveable { mutableStateOf(BoostUnit.BAR) }
     val pager = rememberPagerState(initialPage = initialPage, pageCount = { ClusterView.entries.size })
     val view = ClusterView.entries[pager.currentPage]
@@ -81,15 +105,15 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
     val car by repo.state.collectAsState()
     val key by repo.key.collectAsState()
 
-    // Stress test: drive the throttle idle ↔ full continuously so every gauge moves every frame.
+    // Sweep: a spirited drive loop (launch, shifts, braking, kickdown) so every gauge moves like it would on the road.
     LaunchedEffect(autoSweep, showDemoControls) {
-        if (!autoSweep || !showDemoControls) return@LaunchedEffect
-        val a = Animatable(repo.throttle.value)
-        while (true) {
-            a.animateTo(1f, tween(1600, easing = FastOutSlowInEasing)) { repo.throttle.value = value }
-            a.animateTo(0f, tween(1600, easing = FastOutSlowInEasing)) { repo.throttle.value = value }
-        }
+        if (autoSweep && showDemoControls) repo.runSpiritedDrive()
     }
+
+    // Service log sheet (drawn over everything) and the odometer it pre-fills.
+    var sheet by remember { mutableStateOf<SheetRequest?>(null) }
+    val serviceData by serviceStore.data.collectAsState()
+    val odoKm = if (!serviceData.useManualKm && !car.odometerKm.isNaN()) car.odometerKm.toInt() else serviceData.manualKm
 
     // Peak hold is updated as a side effect, never during composition.
     var peakBoostKPa by rememberSaveable { mutableFloatStateOf(Float.NaN) }
@@ -99,6 +123,7 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
 
     val faults = faultStore.codes
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -114,7 +139,7 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
                 StatusDot(text = link.text, color = if (source == DataSource.DEMO) IngweCaution else if (link.ok) IngweOk else IngweAlert)
             }
             Spacer(Modifier.weight(1f))
-            ViewTabs(selected = view, onSelect = { scope.launch { pager.animateScrollToPage(it.ordinal) } })
+            TabDock(selected = view, onSelect = { scope.launch { pager.animateScrollToPage(it.ordinal) } })
             Spacer(Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 SegmentedControl(
@@ -127,11 +152,7 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
                     selected = boostUnit,
                     onSelect = { boostUnit = it },
                 )
-                HeaderLink(
-                    text = if (faults.isEmpty()) "Faults" else "Faults  ${faults.size}",
-                    color = if (faults.isEmpty()) IngweTextSecondary else IngweAlert,
-                    onClick = { navController.navigate(Screen.Dtc.route) },
-                )
+                FaultsButton(count = faults.size, onClick = { navController.navigate(Screen.Dtc.route) })
                 HeaderLink("Terminal", IngweTextSecondary) { navController.navigate(Screen.Terminal.route) }
                 HeaderLink(
                     text = "Demo",
@@ -141,41 +162,10 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
             }
         }
 
-        // ── Fault notice ─────────────────────────────────────────────────────
-        if (faults.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(IngweSurface)
-                    .clickable { navController.navigate(Screen.Dtc.route) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(IngweAlert))
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = "${faults.size} fault code${if (faults.size == 1) "" else "s"} stored",
-                    style = LabelStyle.copy(fontSize = 13.sp),
-                    color = IngweTextPrimary,
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = faults.joinToString("  ") { it.code },
-                    style = ReadoutSmall.copy(fontSize = 13.sp),
-                    color = IngweTextSecondary,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                )
-                Text("Review", style = LabelStyle.copy(fontSize = 13.sp), color = IngweAccent)
-            }
-        }
-
         // ── Ignition state ───────────────────────────────────────────────────
         if (car.ignition != IgnitionState.RUNNING) {
             Spacer(Modifier.height(12.dp))
-            IgnitionBanner(car)
+            IgnitionBanner(car, asleep = link.asleep, onWake = repo::wake)
         }
 
         // ── Demo bar ─────────────────────────────────────────────────────────
@@ -210,14 +200,13 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
                     ClusterView.ECONOMY -> EconomyPage(car, economy, onResetTrip = repo::resetTrip)
                     ClusterView.AIR -> AirPage(car, boostUnit)
                     ClusterView.ENGINE -> EnginePage(car)
+                    ClusterView.SERVICE -> ServicePage(car.odometerKm, serviceStore, onEdit = { sheet = SheetRequest(it) })
                 }
             }
         }
 
-        // ── Footer ───────────────────────────────────────────────────────────
-        HorizontalDivider(color = IngweHairline)
-        Spacer(Modifier.height(10.dp))
-        Row(
+        // ── Footer (trip stats only on the driving pages; no divider line) ────
+        if (view != ClusterView.SERVICE) Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(28.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -241,7 +230,21 @@ fun DashboardScreen(navController: NavController, faultStore: FaultStore, repo: 
             else FooterStat("Polling", if (source == DataSource.DEMO) "demo 20 Hz" else if (link.hz > 0f) "%.1f Hz".format(link.hz) else "–")
         }
     }
+
+    sheet?.let { req ->
+        LogSheet(
+            entry = req.entry,
+            odometerKm = odoKm,
+            onSave = { serviceStore.save(it); sheet = null },
+            onDelete = { serviceStore.delete(it); sheet = null },
+            onClose = { sheet = null },
+        )
+    }
+    }
 }
+
+/** Which entry the log sheet is open for (null entry = a new one). */
+private class SheetRequest(val entry: ServiceEntry?)
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Views
@@ -344,36 +347,111 @@ private fun OffRoadBody(car: VehicleState) {
  * Header / footer pieces
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Page tabs as one rounded dock (CarPlay-like, kept quiet): a line icon over each label and a
+ * soft capsule that slides under the active page. Icons are built once and cached; the capsule
+ * position is animated and read in the layout phase only, so switching pages doesn't recompose the row.
+ */
 @Composable
-private fun ViewTabs(selected: ClusterView, onSelect: (ClusterView) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        ClusterView.entries.forEach { tab ->
-            val isSelected = tab == selected
-            Column(
-                Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onSelect(tab) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    tab.label,
-                    style = LabelStyle.copy(fontSize = 14.sp),
-                    color = if (isSelected) IngweTextPrimary else IngweTextTertiary,
-                )
-                Spacer(Modifier.height(5.dp))
-                Box(
+private fun TabDock(selected: ClusterView, onSelect: (ClusterView) -> Unit) {
+    val icons = remember { ClusterView.entries.associateWith { strokeIcon(it.icon) } }
+    val bounds = remember { mutableStateMapOf<ClusterView, Pair<Int, Int>>() } // x, width in px
+    val target = bounds[selected]
+    val pillX by animateIntAsState(target?.first ?: 0, spring(dampingRatio = 0.8f, stiffness = 500f), label = "pillX")
+    val pillW by animateIntAsState(target?.second ?: 0, spring(dampingRatio = 0.8f, stiffness = 500f), label = "pillW")
+    val pillColor = IngweSurfaceHigh
+    val padPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(IngweSurface)
+            .drawBehind {
+                if (pillW > 0) drawRoundRect(pillColor, Offset(pillX.toFloat(), 4.dp.toPx()), Size(pillW.toFloat(), size.height - 8.dp.toPx()), CornerRadius(12.dp.toPx()))
+            }
+            .padding(4.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            ClusterView.entries.forEach { tab ->
+                val isSelected = tab == selected
+                Column(
                     Modifier
-                        .width(18.dp)
-                        .height(2.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(if (isSelected) IngweAccent else Color.Transparent),
-                )
+                        .onPlaced { bounds[tab] = (it.positionInParent().x.toInt() + padPx) to it.size.width }
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onSelect(tab) }
+                        .widthIn(min = 68.dp)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(icons.getValue(tab), contentDescription = null, tint = if (isSelected) IngweAccent else IngweTextTertiary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.height(3.dp))
+                    Text(tab.label, style = LabelStyle.copy(fontSize = 13.sp), color = if (isSelected) IngweTextPrimary else IngweTextTertiary)
+                }
             }
         }
     }
 }
 
+/** A 24×24 line icon from SVG path data, stroked like the rest of the UI. */
+private fun strokeIcon(path: String): ImageVector =
+    ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .addPath(
+            pathData = addPathNodes(path),
+            fill = null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 1.7f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+        )
+        .build()
+
+/**
+ * Faults link. With codes stored it becomes a soft red capsule with a count badge, and a thin
+ * light glint passes across it every few seconds. Between glints nothing animates, so the
+ * frame clock rests (no constant redraw on the head unit).
+ */
+@Composable
+private fun FaultsButton(count: Int, onClick: () -> Unit) {
+    if (count == 0) {
+        HeaderLink("Faults", IngweTextSecondary, onClick)
+        return
+    }
+    val glint = remember { Animatable(-1f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(3_500)
+            glint.snapTo(-0.4f)
+            glint.animateTo(1.3f, tween(1_000, easing = FastOutSlowInEasing))
+            glint.snapTo(-1f)
+        }
+    }
+    val alert = IngweAlert
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(alert.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .drawWithContent {
+                drawContent()
+                val g = glint.value
+                if (g > -0.5f) {
+                    val w = size.width * 0.3f
+                    val x = g * size.width
+                    drawRect(
+                        Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.28f), Color.Transparent), startX = x, endX = x + w),
+                        topLeft = Offset(x, 0f), size = Size(w, size.height),
+                    )
+                }
+            }
+            .padding(start = 12.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Faults", style = LabelStyle.copy(fontSize = 13.sp), color = alert)
+        Spacer(Modifier.width(7.dp))
+        Box(Modifier.heightIn(min = 18.dp).widthIn(min = 18.dp).clip(RoundedCornerShape(9.dp)).background(alert).padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
+            Text("$count", style = LabelStyle.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold), color = Color.White)
+        }
+    }
+}
 @Composable
 private fun HeaderLink(text: String, color: Color, onClick: () -> Unit) {
     Text(
@@ -514,7 +592,7 @@ private fun DemoControls(
  * adapter itself at the OBD port.
  */
 @Composable
-private fun IgnitionBanner(car: VehicleState) {
+private fun IgnitionBanner(car: VehicleState, asleep: Boolean, onWake: () -> Unit) {
     val v = car.batteryV
     val batteryColor = when {
         v.isNaN() -> IngweTextTertiary
@@ -524,7 +602,7 @@ private fun IgnitionBanner(car: VehicleState) {
         else -> IngweTeal
     }
     val detail = when (car.ignition) {
-        IgnitionState.OFF -> "Engine computer asleep · only the adapter's battery reading is live"
+        IgnitionState.OFF -> if (asleep) "Adapter asleep to protect the battery · no traffic to the car" else "Engine computer asleep · only the adapter's battery reading is live"
         IgnitionState.ON -> "Readings live · engine values at rest"
         IgnitionState.CRANKING -> "Starter turning · watch the voltage dip"
         IgnitionState.RUNNING -> ""
@@ -544,5 +622,9 @@ private fun IgnitionBanner(car: VehicleState) {
         Text(detail, style = LabelStyle.copy(fontSize = 13.sp), color = IngweTextSecondary, modifier = Modifier.weight(1f), maxLines = 1)
         Text("Battery  ", style = LabelStyle.copy(fontSize = 13.sp), color = IngweTextSecondary)
         Text("${v.fmt("%.1f")} V", style = ReadoutSmall, color = batteryColor)
+        if (asleep) {
+            Spacer(Modifier.width(12.dp))
+            HeaderLink("Wake adapter", IngweAccent, onWake)
+        }
     }
 }

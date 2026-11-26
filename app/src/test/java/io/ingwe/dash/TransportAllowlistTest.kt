@@ -61,24 +61,30 @@ class TransportAllowlistTest {
     @Test fun `ATCRA7E8 is always allowed`() = assertAllowed("ATCRA7E8")
     @Test fun `ATST is always allowed`() = assertAllowed("ATST64")
 
-    // ── Clear codes unlock ────────────────────────────────────────────────────
+    @Test fun `ATRV battery voltage is allowed`() = assertAllowed("ATRV")
+    @Test fun `ATLP adapter sleep is allowed`() = assertAllowed("ATLP")
+    @Test fun `ATAT2 adaptive timing is allowed`() = assertAllowed("ATAT2")
 
-    @Test fun `mode 04 allowed when clear codes enabled`() {
-        ServiceAllowlist.enableClearCodes(true)
-        try {
-            assertAllowed("04")
-        } finally {
-            ServiceAllowlist.enableClearCodes(false)
-        }
+    // ── Adapter commands that could bypass the read-only rule ──────────────────
+
+    @Test fun `STN raw transmit STPX is blocked`() = assertBlocked("STPX h:7E0, d:04")
+    @Test fun `any ST extension is blocked`() = assertBlocked("STDI")
+    @Test fun `monitor all ATMA is blocked`() = assertBlocked("ATMA")
+    @Test fun `programmable parameters ATPP is blocked`() = assertBlocked("ATPP 0C SV 23")
+    @Test fun `wake-up messages ATWM are blocked`() = assertBlocked("ATWM 81 10 F1 3E")
+    @Test fun `baud rate change ATBRD is blocked`() = assertBlocked("ATBRD 23")
+    @Test fun `unknown AT command is blocked`() = assertBlocked("ATTEST")
+
+    // ── Clearing codes is never possible ──────────────────────────────────────
+
+    @Test fun `mode 04 can never be unlocked`() {
+        assertTrue(0x04 !in ServiceAllowlist.active)
+        assertBlocked("04")
     }
 
-    @Test fun `UDS 0x14 allowed when clear codes enabled`() {
-        ServiceAllowlist.enableClearCodes(true)
-        try {
-            assertAllowed("14FFFFFF")
-        } finally {
-            ServiceAllowlist.enableClearCodes(false)
-        }
+    @Test fun `UDS 0x14 can never be unlocked`() {
+        assertTrue(0x14 !in ServiceAllowlist.active)
+        assertBlocked("14FFFFFF")
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

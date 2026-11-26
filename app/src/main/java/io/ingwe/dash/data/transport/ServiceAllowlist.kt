@@ -1,50 +1,28 @@
 package io.ingwe.dash.data.transport
 
 /**
- * SAFETY: Read-only OBD/UDS service allowlist.
+ * SAFETY: Read-only OBD/UDS service allowlist. Fixed at compile time.
  *
- * Only these service bytes may be sent to the adapter. Any attempt to send
- * a command whose first hex byte is not in this set is rejected immediately
- * with an [IllegalArgumentException] — before the bytes ever reach the BLE
- * or serial layer.
+ * Only these service bytes may ever reach the vehicle. Everything else —
+ * clearing codes (0x04, UDS 0x14), session control (0x10), reset (0x11),
+ * security access (0x27), writing (0x2E), actuator tests (0x2F), routines (0x31),
+ * programming — is rejected by [TransportGuard] before the bytes leave the phone.
  *
- * Mode 04 (clear codes) and UDS 0x14 are intentionally excluded from the
- * default allowlist. They are added only when the user explicitly opts in
- * via Settings AND confirms in a dialog at call time.
- *
- * This is enforced by [TransportGuard.validateCommand] which is called by
- * every Transport implementation.
+ * There is deliberately NO way to unlock more services at runtime: Ingwe never
+ * changes anything in the car. Clearing fault codes is left to a workshop tool.
  *
  * Unit test: TransportAllowlistTest.kt — proves each blocked service is rejected.
  */
 object ServiceAllowlist {
 
-    /** Services always permitted (read-only diagnostics). */
-    val DEFAULT: Set<Int> = setOf(
-        0x01, // Mode 01 — Live data (OBD-II)
-        0x03, // Mode 03 — Stored DTCs
-        0x07, // Mode 07 — Pending DTCs
-        0x09, // Mode 09 — Vehicle info (VIN etc.)
-        0x0A, // Mode 0A — Permanent DTCs
-        0x19, // UDS ReadDTCInformation
-        0x22, // UDS ReadDataByIdentifier
+    /** The only services Ingwe may send. All are read-only by definition. */
+    val active: Set<Int> = setOf(
+        0x01, // OBD Mode 01 — live data
+        0x03, // OBD Mode 03 — read stored fault codes
+        0x07, // OBD Mode 07 — read pending fault codes
+        0x09, // OBD Mode 09 — vehicle info (VIN etc.)
+        0x0A, // OBD Mode 0A — read permanent fault codes
+        0x19, // UDS ReadDTCInformation (read-only)
+        0x22, // UDS ReadDataByIdentifier (read-only)
     )
-
-    /**
-     * Services that clear fault codes. Only added to [active] when the user
-     * deliberately enables "Allow clear codes" in Settings.
-     */
-    val CLEAR_CODES: Set<Int> = setOf(
-        0x04, // Mode 04 — Clear/reset emission DTCs
-        0x14, // UDS ClearDiagnosticInformation
-    )
-
-    @Volatile
-    private var clearCodesEnabled: Boolean = false
-
-    /** Call this (from Settings screen) to unlock clear-code commands. Requires separate dialog confirmation at use-site. */
-    fun enableClearCodes(enabled: Boolean) { clearCodesEnabled = enabled }
-
-    val active: Set<Int>
-        get() = if (clearCodesEnabled) DEFAULT + CLEAR_CODES else DEFAULT
 }

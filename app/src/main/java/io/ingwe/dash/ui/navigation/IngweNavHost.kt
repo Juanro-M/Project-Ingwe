@@ -11,7 +11,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import io.ingwe.dash.data.service.ServiceStore
 import io.ingwe.dash.data.signals.SignalCatalog
+import java.io.File
 import io.ingwe.dash.data.transport.BleTransport
 import io.ingwe.dash.data.vehicle.VehicleRepository
 import io.ingwe.dash.ui.components.IgnitionIntro
@@ -40,6 +42,9 @@ fun IngweNavHost(
         )
     }
 
+    // Service log: one small JSON file in app-private storage (see ServiceStore).
+    val serviceStore = remember { ServiceStore(File(context.filesDir, "service_log.json")) }
+
     // Data runs only while the app is on screen: backgrounded = no polling, no CPU.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(repo, lifecycle) {
@@ -52,7 +57,7 @@ fun IngweNavHost(
             startDestination = Screen.Dashboard.route,
         ) {
             composable(Screen.Dashboard.route) {
-                DashboardScreen(navController = navController, faultStore = faultStore, repo = repo)
+                DashboardScreen(navController = navController, faultStore = faultStore, repo = repo, serviceStore = serviceStore)
             }
             composable(Screen.Terminal.route) {
                 TerminalScreen(navController = navController)

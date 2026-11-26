@@ -6,6 +6,7 @@ import io.ingwe.dash.data.obd.PidLengths
 import io.ingwe.dash.data.signals.SignalDefinition
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 /** One poll cycle's result: latest value per signal id, plus link health. */
@@ -78,6 +79,11 @@ class PollScheduler(
             }
             cycle++
 
+            // Bus-load cap: never more than ~12 cycles a second, however fast the adapter is.
+            // Keeps diagnostic traffic a tiny fraction of the CAN bus and leaves the ECU idle time.
+            val busyMs = (clock() - t0) / 1_000_000L
+            if (busyMs < MIN_CYCLE_MS) delay(MIN_CYCLE_MS - busyMs)
+
             val seconds = (clock() - t0).coerceAtLeast(1L) / 1e9f
             hz = if (hz == 0f) 1f / seconds else hz * 0.8f + (1f / seconds) * 0.2f // smoothed
             val parked = (fast + slow + uds).count { it.parkedUntilCycle > cycle }
@@ -125,6 +131,7 @@ class PollScheduler(
 
     companion object {
         const val UDS_EVERY = 8L
+        const val MIN_CYCLE_MS = 80L
         const val MAX_FAILURES = 3
         const val PARK_CYCLES = 300L // ~30 s at 10 Hz, then try again
     }

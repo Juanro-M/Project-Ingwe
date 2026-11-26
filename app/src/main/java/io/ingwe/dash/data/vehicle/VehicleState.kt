@@ -73,6 +73,8 @@ data class VehicleState(
     val glowPhase: GlowPhase = GlowPhase.OFF,
     val glowSecondsLeft: Float = 0f,
     val ignition: IgnitionState = IgnitionState.RUNNING,
+    /** Odometer from OBD-II PID A6 when the ECU supports it (km). */
+    val odometerKm: Float = NaN,
 ) {
     /** Altitude from the barometer (international standard atmosphere). */
     val altitudeM: Float get() = if (baroKPa.isNaN()) NaN else (44330.0 * (1 - (baroKPa / 101.325).pow(0.1903))).toFloat()
@@ -94,6 +96,7 @@ data class VehicleState(
 
     companion object {
         private const val NaN = Float.NaN
+        const val DEMO_ODOMETER_KM = 134_000f
         private val GEAR_UPSHIFT_KMH = floatArrayOf(15f, 32f, 50f, 70f, 92f, 112f, 130f)
 
         /**
@@ -105,7 +108,7 @@ data class VehicleState(
 
         /** Demo for a key position; RUNNING uses the throttle simulation. */
         fun simulated(throttle: Float, nowSec: Double, coldStartAtSec: Double?, key: IgnitionState): VehicleState = when (key) {
-            IgnitionState.OFF -> ignitionOff(12.6f)
+            IgnitionState.OFF -> ignitionOff(12.6f).copy(odometerKm = DEMO_ODOMETER_KM)
             IgnitionState.ON, IgnitionState.CRANKING -> simulated(0f, nowSec, coldStartAtSec).copy(
                 ignition = key,
                 rpm = if (key == IgnitionState.CRANKING) 220f else 0f,
@@ -170,6 +173,7 @@ data class VehicleState(
                 injectorCorrections = listOf(0.4f, -0.8f, 1.1f, -0.3f, 2.3f, -0.6f)
                     .mapIndexed { i, v -> v + (sin(nowSec * 0.7 + i * 1.9) * 0.15).toFloat() },
                 glowOhms = listOf(null, 0.62f, 0.58f, 0.61f, 0.63f, 0.60f), // cyl 1 open (demo fault P0671)
+                odometerKm = DEMO_ODOMETER_KM,
                 glowPhase = phase,
                 glowSecondsLeft = when (phase) {
                     GlowPhase.PRE -> (6 - sinceCold).toFloat()
@@ -217,6 +221,7 @@ data class VehicleState(
                 steeringDeg = f("steering_angle"),
                 pitchDeg = f("pitch_angle"),
                 rollDeg = f("roll_angle"),
+                odometerKm = f("odometer"),
             )
         }
     }

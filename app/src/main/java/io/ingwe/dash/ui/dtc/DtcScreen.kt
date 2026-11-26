@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +32,9 @@ private enum class DtcFilter(val label: String) { ALL("All"), STORED("Stored"), 
  * Fault codes for the engine ECU: scan (Mode 03/07/0A), inspect freeze frames,
  * and clear (Mode 04, behind a confirmation).
  *
- * M1: scan and clear operate on [FaultStore] only — nothing is sent to the vehicle.
+ * Read-only: Ingwe reads fault codes but never clears them (Mode 04 / UDS 0x14 are
+ * permanently blocked). Clearing codes is left to a workshop tool.
+ * M1: scan operates on [FaultStore] only.
  */
 @Composable
 fun DtcScreen(navController: NavController, faultStore: FaultStore) {
@@ -41,7 +42,6 @@ fun DtcScreen(navController: NavController, faultStore: FaultStore) {
     var isScanning by remember { mutableStateOf(false) }
     var scanProgress by remember { mutableFloatStateOf(0f) }
     var hasScanned by remember { mutableStateOf(false) }
-    var confirmClear by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(DtcFilter.ALL) }
     var expandedCode by remember { mutableStateOf<String?>(null) }
 
@@ -50,30 +50,6 @@ fun DtcScreen(navController: NavController, faultStore: FaultStore) {
         DtcFilter.ALL -> codes.toList()
         DtcFilter.STORED -> codes.filter { it.severity == DtcSeverity.CONFIRMED || it.severity == DtcSeverity.PERMANENT }
         DtcFilter.PENDING -> codes.filter { it.severity == DtcSeverity.PENDING }
-    }
-
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            containerColor = IngweSurfaceHigh,
-            title = { Text("Clear all fault codes?", style = MaterialTheme.typography.headlineMedium, color = IngweTextPrimary) },
-            text = {
-                Text(
-                    "This resets stored codes and freeze-frame data and turns off the check-engine light. " +
-                        "Readiness monitors will need a drive cycle to complete again.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = IngweTextSecondary,
-                )
-            },
-            confirmButton = {
-                ActionButton("Clear codes", destructive = true, onClick = {
-                    faultStore.clearAll()
-                    expandedCode = null
-                    confirmClear = false
-                })
-            },
-            dismissButton = { ActionButton("Cancel", onClick = { confirmClear = false }) },
-        )
     }
 
     Column(
@@ -104,12 +80,6 @@ fun DtcScreen(navController: NavController, faultStore: FaultStore) {
                     }
                 },
             )
-            ActionButton(
-                text = "Clear codes",
-                destructive = true,
-                enabled = codes.isNotEmpty() && !isScanning,
-                onClick = { confirmClear = true },
-            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -120,6 +90,8 @@ fun DtcScreen(navController: NavController, faultStore: FaultStore) {
                 selected = filter,
                 onSelect = { filter = it },
             )
+            Spacer(Modifier.width(16.dp))
+            Text("Read-only · clear codes with a workshop tool", style = LabelStyle, color = IngweTextTertiary)
             Spacer(Modifier.weight(1f))
             Text(
                 text = when {

@@ -29,6 +29,6 @@ class OBDForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        private const val TAG = "Ingwe/OBDService"
+        private const val TAG = "Argus/OBDService"
     }
 }
